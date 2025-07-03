@@ -1,5 +1,9 @@
-import { readFileSync, existsSync, statSync } from 'fs';
-import { join } from 'path';
+import { 
+  STORAGE_BUCKETS, 
+  downloadFromStorage, 
+  fileExistsInStorage, 
+  getFileInfo 
+} from '../../../utils/supabase.js';
 import { checkAuthHeader } from '../../../utils/auth';
 
 export async function GET(request) {
@@ -9,25 +13,40 @@ export async function GET(request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const csvFile = join(process.cwd(), 'public', 'saved-texts', 'training_data.csv');
+    const csvFile = 'training_data.csv';
     
-    if (!existsSync(csvFile)) {
+    const fileExists = await fileExistsInStorage(STORAGE_BUCKETS.CSV_DATA, csvFile);
+    
+    if (!fileExists) {
       return Response.json({
         exists: false,
         totalEntries: 0,
         labelCounts: {},
         fileSize: 0,
         sampleEntries: [],
-        message: 'CSV file does not exist yet'
+        message: 'CSV file does not exist yet in Supabase storage',
+        storage: 'supabase'
       });
     }
 
-    // Get file stats
-    const stats = statSync(csvFile);
-    const fileSize = stats.size;
+    // Get file info from Supabase
+    const fileInfoResult = await getFileInfo(STORAGE_BUCKETS.CSV_DATA, csvFile);
+    let fileSize = 0;
+    let lastModified = null;
+    
+    if (fileInfoResult.success) {
+      fileSize = fileInfoResult.data.metadata?.size || 0;
+      lastModified = fileInfoResult.data.updated_at;
+    }
 
-    // Read and parse CSV content
-    const content = readFileSync(csvFile, 'utf8');
+    // Download and parse CSV content
+    const downloadResult = await downloadFromStorage(STORAGE_BUCKETS.CSV_DATA, csvFile);
+    
+    if (!downloadResult.success) {
+      throw new Error(`Failed to download CSV file: ${downloadResult.error}`);
+    }
+    
+    const content = downloadResult.data;
     const lines = content.split('\n').filter(line => line.trim() !== '');
     
     // Parse entries and count labels
@@ -59,19 +78,21 @@ export async function GET(request) {
       fileSize: fileSize,
       sampleEntries: sampleEntries,
       uniqueLabels: Object.keys(labelCounts).length,
-      lastModified: stats.mtime.toISOString()
+      lastModified: lastModified || new Date().toISOString(),
+      storage: 'supabase'
     });
 
   } catch (error) {
-    console.error('Error analyzing CSV file:', error);
+    console.error('Error analyzing CSV file from Supabase:', error);
     return Response.json(
       { 
-        error: 'Failed to analyze CSV file',
+        error: 'Failed to analyze CSV file from Supabase storage',
         exists: false,
         totalEntries: 0,
         labelCounts: {},
         fileSize: 0,
-        sampleEntries: []
+        sampleEntries: [],
+        storage: 'supabase'
       }, 
       { status: 500 }
     );

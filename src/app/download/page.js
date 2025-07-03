@@ -40,14 +40,33 @@ export default function DownloadPage() {
     }
   };
 
-  const handleDownload = () => {
-    // Trigger download of the CSV file
-    const link = document.createElement('a');
-    link.href = '/saved-texts/training_data.csv';
-    link.download = 'training_data.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async () => {
+    try {
+      // Use the new download API that works with Supabase storage
+      const response = await fetch('/api/download-csv', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to download CSV file');
+      }
+      
+      // Get the blob data and create download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'training_data.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading file:', err);
+      setError('Failed to download CSV file');
+    }
   };
 
   const handleClearCSV = async () => {

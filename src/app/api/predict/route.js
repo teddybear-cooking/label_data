@@ -10,7 +10,7 @@ export async function POST(request) {
     }
 
     // Use the endpoint from environment variable
-    const apiEndpoint = process.env.MODEL_ENDPOINT;
+    const apiEndpoint = "https://arkar1431-language-detector.hf.space/predict";
 
     console.log('Calling external API:', apiEndpoint);
     console.log('Request payload:', { text: text.trim() });

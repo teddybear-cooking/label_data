@@ -1,47 +1,62 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { 
+  STORAGE_BUCKETS, 
+  downloadFromStorage, 
+  updateFileInStorage, 
+  fileExistsInStorage 
+} from '../../../utils/supabase.js';
 
 // No sample sentences - only use content from saved_texts.txt
 
 export async function GET() {
   try {
-    // First try to read from saved_texts.txt (admin submissions)
-    const sentencesFile = join(process.cwd(), 'public', 'saved-texts', 'saved_texts.txt');
+    // First try to read from saved_texts.txt (admin submissions) in Supabase storage
+    const sentencesFile = 'saved_texts.txt';
     let sentences = [];
     let originalEntries = [];
     let sentenceTracking = [];
     let isFromFile = false;
     
-    if (existsSync(sentencesFile)) {
-      const content = readFileSync(sentencesFile, 'utf8');
+    const fileExists = await fileExistsInStorage(STORAGE_BUCKETS.TEXT_FILES, sentencesFile);
+    if (fileExists) {
+      const downloadResult = await downloadFromStorage(STORAGE_BUCKETS.TEXT_FILES, sentencesFile);
       
-      // Parse the admin file format which has timestamps and separators
-      // Format: [timestamp]\ntext\n\n---\n\n[timestamp]\ntext...
-      const rawEntries = content.split('\n\n---\n\n');
-      originalEntries = rawEntries
-        .map(entry => {
-          const lines = entry.split('\n');
-          const timestamp = lines[0]; // Keep original timestamp
-          const text = lines.slice(1).join('\n').trim();
-          return { timestamp, text };
-        })
-        .filter(entry => entry.text !== ''); // Remove empty entries
+      if (!downloadResult.success) {
+        console.error('Failed to download sentences file from Supabase:', downloadResult.error);
+        throw new Error(`Failed to download file: ${downloadResult.error}`);
+      }
       
-      // Split each paragraph into individual sentences based on periods
+      const content = downloadResult.data;
+      
+      // Parse raw paragraphs separated by double newlines
+      const rawParagraphs = content.split('\n\n').filter(paragraph => paragraph.trim() !== '');
+      
+      originalEntries = rawParagraphs.map((paragraph, index) => ({
+        text: paragraph.trim(),
+        paragraphIndex: index
+      }));
+      
+      // Split each paragraph into individual sentences
       originalEntries.forEach((entry, entryIndex) => {
-        // Split by period and clean up sentences
+        // Split by sentence endings (., !, ?) and clean up sentences
         const splitSentences = entry.text
-          .split('.')
+          .split(/[.!?]+/)
           .map(sentence => sentence.trim())
-          .filter(sentence => sentence.length > 0)
-          .map(sentence => sentence + '.'); // Add period back
+          .filter(sentence => sentence.length > 10) // Only keep sentences with meaningful length
+          .map(sentence => {
+            // Add appropriate punctuation back if missing
+            const lastChar = sentence.slice(-1);
+            if (!['.', '!', '?'].includes(lastChar)) {
+              return sentence + '.';
+            }
+            return sentence;
+          });
         
         // Add source tracking to each sentence
         splitSentences.forEach(sentence => {
           sentenceTracking.push({
             sentence: sentence,
-            sourceEntryIndex: entryIndex,
-            originalTimestamp: entry.timestamp
+            sourceParagraphIndex: entryIndex,
+            originalText: entry.text
           });
         });
       });
@@ -74,14 +89,20 @@ export async function GET() {
       selectedSentenceInfo = sentenceTracking[randomIndex];
       
       // Remove the sentence from its source paragraph
-      const sourceEntry = originalEntries[selectedSentenceInfo.sourceEntryIndex];
+      const sourceEntry = originalEntries[selectedSentenceInfo.sourceParagraphIndex];
       if (sourceEntry) {
-        // Split the paragraph into sentences
+        // Split the paragraph into sentences (same logic as above)
         let paragraphSentences = sourceEntry.text
-          .split('.')
+          .split(/[.!?]+/)
           .map(sentence => sentence.trim())
-          .filter(sentence => sentence.length > 0)
-          .map(sentence => sentence + '.');
+          .filter(sentence => sentence.length > 10)
+          .map(sentence => {
+            const lastChar = sentence.slice(-1);
+            if (!['.', '!', '?'].includes(lastChar)) {
+              return sentence + '.';
+            }
+            return sentence;
+          });
         
         // Remove the selected sentence
         paragraphSentences = paragraphSentences.filter(sentence => sentence !== selectedSentenceInfo.sentence);
@@ -95,33 +116,19 @@ export async function GET() {
         }
       }
       
-      // Check if the source entry became empty and count how many entries before it are empty
-      let removedEntriesBeforeSource = 0;
-      const originalEntriesBeforeFilter = [...originalEntries];
-      
-      // Remove empty entries and count removed entries
-      originalEntries = originalEntries.filter((entry, index) => {
-        const isEmpty = entry.text.trim() === '';
-        if (isEmpty && index <= selectedSentenceInfo.sourceEntryIndex) {
-          removedEntriesBeforeSource++;
-        }
-        return !isEmpty;
-      });
+      // Remove empty entries
+      originalEntries = originalEntries.filter(entry => entry.text.trim() !== '');
       
       // Update sentence tracking - remove the selected sentence
       sentenceTracking.splice(randomIndex, 1);
       
-      // Update all sourceEntryIndex values to account for removed entries
+      // Update paragraph indices in remaining sentence tracking
       sentenceTracking.forEach(item => {
-        let newIndex = item.sourceEntryIndex;
-        // Count how many entries before this one were removed
-        let removedBefore = 0;
-        for (let i = 0; i < item.sourceEntryIndex; i++) {
-          if (originalEntriesBeforeFilter[i]?.text.trim() === '') {
-            removedBefore++;
-          }
+        // Find the new index of the paragraph in the filtered array
+        const newIndex = originalEntries.findIndex(entry => entry.text === item.originalText);
+        if (newIndex !== -1) {
+          item.sourceParagraphIndex = newIndex;
         }
-        item.sourceEntryIndex = newIndex - removedBefore;
       });
     }
     
@@ -131,28 +138,36 @@ export async function GET() {
     if (isFromFile) {
       try {
         if (originalEntries.length > 0) {
-          // Rebuild the file in the proper admin format with original timestamps
+          // Rebuild the file with simple paragraph separation
           const rebuiltContent = originalEntries
-            .map((entry, index) => {
-              return index === 0 ? `${entry.timestamp}\n${entry.text}` : `\n\n---\n\n${entry.timestamp}\n${entry.text}`;
-            })
-            .join('');
+            .map(entry => entry.text)
+            .join('\n\n');
           
-          writeFileSync(sentencesFile, rebuiltContent, 'utf8');
-          console.log(`Removed sentence from saved_texts.txt. ${originalEntries.length} paragraphs remaining, ${sentences.length} individual sentences remaining.`);
+          const updateResult = await updateFileInStorage(STORAGE_BUCKETS.TEXT_FILES, sentencesFile, rebuiltContent);
+          
+          if (updateResult.success) {
+            console.log(`Removed sentence from saved_texts.txt in Supabase. ${originalEntries.length} paragraphs remaining, ${sentences.length} individual sentences remaining.`);
+          } else {
+            throw new Error(updateResult.error);
+          }
         } else {
-          writeFileSync(sentencesFile, '', 'utf8');
-          console.log('All individual sentences from saved_texts.txt have been used. File is now empty.');
+          const updateResult = await updateFileInStorage(STORAGE_BUCKETS.TEXT_FILES, sentencesFile, '');
+          
+          if (updateResult.success) {
+            console.log('All individual sentences from saved_texts.txt have been used. File is now empty in Supabase.');
+          } else {
+            throw new Error(updateResult.error);
+          }
         }
       } catch (writeError) {
-        console.error('Error updating saved_texts.txt:', writeError);
+        console.error('Error updating saved_texts.txt in Supabase:', writeError);
         // Continue execution - don't fail the request if file update fails
       }
     }
     
     console.log(`Selected sentence: "${selectedSentence}"`);
     if (selectedSentenceInfo) {
-      console.log(`Removed sentence from paragraph ${selectedSentenceInfo.sourceEntryIndex}`);
+      console.log(`Removed sentence from paragraph ${selectedSentenceInfo.sourceParagraphIndex}`);
       console.log(`Remaining paragraphs: ${originalEntries.length}`);
       console.log(`Remaining individual sentences: ${sentences.length}`);
     }

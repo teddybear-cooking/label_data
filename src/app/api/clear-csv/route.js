@@ -1,5 +1,8 @@
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
+import { 
+  STORAGE_BUCKETS, 
+  updateFileInStorage, 
+  fileExistsInStorage 
+} from '../../../utils/supabase.js';
 import { checkAuthHeader } from '../../../utils/auth';
 
 export async function POST(request) {
@@ -9,20 +12,26 @@ export async function POST(request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const csvPath = join(process.cwd(), 'public', 'saved-texts', 'training_data.csv');
+    const csvFile = 'training_data.csv';
     
-    // Write just the header row to clear the file
-    await writeFile(csvPath, 'text\tlabel\n', 'utf8');
+    // Clear the file by uploading empty content
+    const clearResult = await updateFileInStorage(STORAGE_BUCKETS.CSV_DATA, csvFile, '');
+    
+    if (!clearResult.success) {
+      throw new Error(`Failed to clear CSV file in Supabase: ${clearResult.error}`);
+    }
     
     return Response.json({ 
       success: true, 
-      message: 'CSV file cleared successfully' 
+      message: 'CSV file cleared successfully in Supabase storage',
+      storage: 'supabase'
     });
   } catch (error) {
-    console.error('Error clearing CSV file:', error);
+    console.error('Error clearing CSV file from Supabase:', error);
     return Response.json({ 
       success: false, 
-      error: 'Failed to clear CSV file' 
+      error: 'Failed to clear CSV file from Supabase storage',
+      storage: 'supabase'
     }, { status: 500 });
   }
 } 

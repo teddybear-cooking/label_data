@@ -1,5 +1,9 @@
-import { appendFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { 
+  STORAGE_BUCKETS, 
+  downloadFromStorage, 
+  uploadToStorage, 
+  fileExistsInStorage 
+} from '../../../utils/supabase.js';
 import { checkAuthHeader } from '../../../utils/auth';
 
 export async function POST(request) {
@@ -9,7 +13,7 @@ export async function POST(request) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { text, timestamp } = await request.json();
+    const { text } = await request.json();
     
     // Debug: Log received text
     console.log('Received text length:', text?.length || 0);
@@ -22,34 +26,41 @@ export async function POST(request) {
     // Use a single filename
     const filename = 'saved_texts.txt';
     
-    // Create saved-texts directory if it doesn't exist
-    const saveDir = join(process.cwd(), 'public', 'saved-texts');
-    if (!existsSync(saveDir)) {
-      mkdirSync(saveDir, { recursive: true });
+    console.log('Saving to Supabase storage bucket:', STORAGE_BUCKETS.TEXT_FILES);
+    
+    // Check if file exists in Supabase storage and get existing content
+    const fileExists = await fileExistsInStorage(STORAGE_BUCKETS.TEXT_FILES, filename);
+    let existingContent = '';
+    
+    if (fileExists) {
+      const downloadResult = await downloadFromStorage(STORAGE_BUCKETS.TEXT_FILES, filename);
+      if (downloadResult.success) {
+        existingContent = downloadResult.data;
+      } else {
+        console.warn('Failed to download existing text file:', downloadResult.error);
+      }
     }
     
-    // Full file path
-    const filePath = join(saveDir, filename);
+    // Save raw paragraphs with simple newline separation
+    const separator = existingContent ? '\n\n' : '';
+    const textToAppend = `${separator}${text.trim()}`;
+    const newContent = existingContent + textToAppend;
     
-    // Create timestamp for the entry
-    const date = new Date(timestamp || new Date());
-    const dateStr = date.toLocaleString();
+    // Upload updated content to Supabase storage
+    const uploadResult = await uploadToStorage(STORAGE_BUCKETS.TEXT_FILES, filename, newContent);
     
-    // Prepare text with separator and timestamp
-    const separator = existsSync(filePath) ? '\n\n---\n\n' : '';
-    const textToAppend = `${separator}[${dateStr}]\n${text}`;
+    if (!uploadResult.success) {
+      throw new Error(`Failed to upload to Supabase storage: ${uploadResult.error}`);
+    }
     
-    // Append to the existing file
-    appendFileSync(filePath, textToAppend, 'utf8');
-    
-    console.log(`Text appended to: ${filename}`);
+    console.log(`Text appended to Supabase storage: ${filename}`);
     console.log('Appended text length:', textToAppend.length);
     
     return Response.json({
       success: true,
       filename: filename,
-      path: `/saved-texts/${filename}`,
-      timestamp: date.toISOString(),
+      storage: 'supabase',
+      bucket: STORAGE_BUCKETS.TEXT_FILES,
       wordCount: text.trim().split(/\s+/).filter(word => word.length > 0).length,
       charCount: text.length
     });
