@@ -56,12 +56,12 @@ export default function DownloadPage() {
       // Get the blob data and create download link
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
+    const link = document.createElement('a');
       link.href = url;
-      link.download = 'training_data.csv';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    link.download = 'training_data.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error downloading file:', err);
@@ -115,48 +115,48 @@ export default function DownloadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="min-h-screen bg-black">
+      <div className="container mx-auto px-4 py-4 sm:py-8 max-w-4xl">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-4">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4 sm:gap-0">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
               Download Training Data
             </h1>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <a 
                 href="/" 
-                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-center text-sm sm:text-base"
               >
                 ← Back to Main
               </a>
               <button
                 onClick={logout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-sm sm:text-base"
               >
                 Logout
               </button>
             </div>
           </div>
-          <p className="text-gray-600 dark:text-gray-400">
+          <p className="text-gray-300 text-sm sm:text-base">
             View statistics and download your collected training data
           </p>
         </div>
 
         {/* Loading State */}
         {isLoading && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
             <div className="flex items-center justify-center py-8">
               <span className="animate-spin mr-3">⟳</span>
-              Loading file statistics...
+              <span className="text-gray-200">Loading file statistics...</span>
             </div>
           </div>
         )}
 
         {/* Error State */}
         {error && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
-            <div className="text-red-600 dark:text-red-400 text-center py-8">
+          <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
+            <div className="text-red-200 text-center py-8">
               {error}
             </div>
           </div>
@@ -166,35 +166,35 @@ export default function DownloadPage() {
         {fileStats && (
           <div className="space-y-6">
             {/* Overview Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
+              <h2 className="text-lg sm:text-xl font-semibold mb-4 text-white">
                 File Overview
               </h2>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="text-center p-3 sm:p-4 bg-blue-700/50 border border-blue-600 rounded-lg">
+                  <div className="text-xl sm:text-2xl font-bold text-blue-300">
                     {fileStats.totalEntries}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="text-xs sm:text-sm text-gray-200">
                     Total Sentences
                   </div>
                 </div>
                 
-                <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                <div className="text-center p-3 sm:p-4 bg-green-700/50 border border-green-600 rounded-lg">
+                  <div className="text-xl sm:text-2xl font-bold text-green-300">
                     {Object.keys(fileStats.labelCounts || {}).length}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="text-xs sm:text-sm text-gray-200">
                     Unique Labels
                   </div>
                 </div>
                 
-                <div className="text-center p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                <div className="text-center p-3 sm:p-4 bg-purple-700/50 border border-purple-600 rounded-lg">
+                  <div className="text-xl sm:text-2xl font-bold text-purple-300">
                     {formatFileSize(fileStats.fileSize)}
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="text-xs sm:text-sm text-gray-200">
                     File Size
                   </div>
                 </div>
@@ -203,8 +203,8 @@ export default function DownloadPage() {
 
             {/* Label Distribution */}
             {fileStats.labelCounts && Object.keys(fileStats.labelCounts).length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
+                <h2 className="text-lg sm:text-xl font-semibold mb-4 text-white">
                   Label Distribution
                 </h2>
                 
@@ -214,17 +214,17 @@ export default function DownloadPage() {
                     .map(([label, count]) => {
                       const percentage = fileStats.totalEntries > 0 ? (count / fileStats.totalEntries * 100).toFixed(1) : 0;
                       return (
-                        <div key={label} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded">
+                        <div key={label} className="flex items-center justify-between p-3 bg-slate-700 border border-slate-500 rounded">
                           <div className="flex items-center space-x-3">
-                            <span className="capitalize font-medium text-gray-700 dark:text-gray-300">
+                            <span className="capitalize font-medium text-gray-200">
                               {label}
                             </span>
                           </div>
                           <div className="flex items-center space-x-4">
-                            <div className="text-sm text-gray-600 dark:text-gray-400">
+                            <div className="text-sm text-gray-300">
                               {percentage}%
                             </div>
-                            <div className="font-semibold text-gray-900 dark:text-white">
+                            <div className="font-semibold text-gray-200">
                               {count}
                             </div>
                           </div>
@@ -236,23 +236,23 @@ export default function DownloadPage() {
             )}
 
             {/* Download Section */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
-              <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
+              <h2 className="text-lg sm:text-xl font-semibold mb-4 text-white">
                 Download Options
               </h2>
               
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button
                   onClick={handleDownload}
                   disabled={!fileStats.exists || fileStats.totalEntries === 0}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm sm:text-base w-full sm:w-auto"
                 >
                   Download CSV File
                 </button>
                 
                 <button
                   onClick={fetchFileStats}
-                  className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                  className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm sm:text-base w-full sm:w-auto"
                 >
                   Refresh Statistics
                 </button>
@@ -260,14 +260,14 @@ export default function DownloadPage() {
                 <button
                   onClick={handleClearCSV}
                   disabled={!fileStats.exists || fileStats.totalEntries === 0}
-                  className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                  className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm sm:text-base w-full sm:w-auto"
                 >
                   Clear CSV Data
                 </button>
               </div>
               
               {fileStats.totalEntries === 0 && (
-                <div className="mt-4 p-3 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded-lg">
+                <div className="mt-4 p-3 bg-yellow-700/50 border border-yellow-600 text-yellow-200 rounded-lg text-sm sm:text-base">
                   No training data available. Start collecting data through the main interface.
                 </div>
               )}
@@ -275,26 +275,26 @@ export default function DownloadPage() {
 
             {/* File Preview */}
             {fileStats.sampleEntries && fileStats.sampleEntries.length > 0 && (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
+                <h2 className="text-lg sm:text-xl font-semibold mb-4 text-white">
                   Sample Data (First 5 entries)
                 </h2>
                 
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-600">
-                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Text</th>
-                        <th className="text-left py-2 px-3 font-medium text-gray-700 dark:text-gray-300">Label</th>
+                      <tr className="border-b border-slate-500">
+                        <th className="text-left py-2 px-3 font-medium text-gray-200">Text</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-200">Label</th>
                       </tr>
                     </thead>
                     <tbody>
                       {fileStats.sampleEntries.map((entry, index) => (
-                        <tr key={index} className="border-b border-gray-100 dark:border-gray-700">
-                          <td className="py-2 px-3 text-gray-600 dark:text-gray-400 max-w-md truncate">
+                        <tr key={index} className="border-b border-slate-500">
+                          <td className="py-2 px-3 text-gray-300 max-w-md truncate">
                             {entry.text}
                           </td>
-                          <td className="py-2 px-3 text-gray-900 dark:text-white capitalize">
+                          <td className="py-2 px-3 text-gray-200 capitalize">
                             {entry.label}
                           </td>
                         </tr>
