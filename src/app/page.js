@@ -347,7 +347,7 @@ export default function Home() {
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Title */}
         <h1 className="text-3xl font-bold text-center mb-8">
-          I need more data to train the model
+          I need more data
         </h1>
 
 
@@ -356,7 +356,7 @@ export default function Home() {
           {/* Header */}
           <div className="mb-6">
             <h2 className="text-xl font-semibold">
-              Write and choose label
+              Write
             </h2>
           </div>
 
@@ -367,12 +367,19 @@ export default function Home() {
             </div>
           )}
 
+          {/* Categories Display */}
+          <div className="mb-4">
+            <div className="text-center text-sm text-gray-600 dark:text-gray-400">
+              normal  •  hate speech  •  offensive  •  religious hate  •  political hate
+            </div>
+          </div>
+
           {/* Text Input */}
           <div className="mb-6">
             <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Write something Offensive like ---shut your ass up!"
+              placeholder="Write something offensive like... Shut the fuck up OR What the fuck   "
               className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
               rows={4}
             />
