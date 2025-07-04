@@ -347,7 +347,7 @@ export default function Home() {
       <div className="container mx-auto px-4 py-4 sm:py-8 max-w-4xl">
         {/* Title */}
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center mb-6 sm:mb-8 text-white">
-          labal sentences interface for nomanweb model
+          collecting sentences to train the model
         </h1>
 
         {/* Main Form Section */}
