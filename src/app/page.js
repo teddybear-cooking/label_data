@@ -379,7 +379,7 @@ export default function Home() {
             <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="offensive words like... What the fuck brother  OR  Shut the fuck up"
+              placeholder="write some offensive words"
               className="w-full p-3 sm:p-4 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-500 text-sm sm:text-base"
               rows={4}
             />
