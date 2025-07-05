@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import StorageSetup from '../components/StorageSetup';
 import RawParagraphSubmission from '../components/RawParagraphSubmission';
 import TextInputForm from '../components/TextInputForm';
@@ -12,6 +12,19 @@ export default function Home() {
   const [savedFiles, setSavedFiles] = useState([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [activeTab, setActiveTab] = useState('collection');
+
+  // Load active tab from localStorage on component mount
+  useEffect(() => {
+    const savedActiveTab = localStorage.getItem('activeTab');
+    if (savedActiveTab && ['collection', 'admin', 'data'].includes(savedActiveTab)) {
+      setActiveTab(savedActiveTab);
+    }
+  }, []);
+
+  // Save active tab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
 
   const handleSubmissionSuccess = (result) => {
     // Add to saved files list for display
