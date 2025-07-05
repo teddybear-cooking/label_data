@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { isAuthenticated, redirectToLogin, logout } from '../../utils/auth';
 
 export default function AdminPage() {
   const [textInput, setTextInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [savedFiles, setSavedFiles] = useState([]);
-  const [checkingAuth, setCheckingAuth] = useState(true);
   const [storageSetup, setStorageSetup] = useState(null);
   const [isSettingUpStorage, setIsSettingUpStorage] = useState(false);
   
@@ -22,13 +20,6 @@ export default function AdminPage() {
   const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
 
   useEffect(() => {
-    // Check authentication on mount
-    if (!isAuthenticated()) {
-      redirectToLogin('/admin');
-      return;
-    }
-    setCheckingAuth(false);
-    
     // Load CSV stats on mount
     fetchCsvStats();
   }, []);
@@ -47,7 +38,6 @@ export default function AdminPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
         body: JSON.stringify({ 
           text: textInput.trim()
@@ -85,9 +75,6 @@ export default function AdminPage() {
     try {
       const response = await fetch('/api/setup-storage', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
       });
 
       if (!response.ok) {
@@ -115,11 +102,7 @@ export default function AdminPage() {
     setIsLoadingCsvStats(true);
     setCsvError('');
     try {
-      const response = await fetch('/api/csv-stats', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-      });
+      const response = await fetch('/api/csv-stats');
 
       if (!response.ok) {
         throw new Error('Failed to fetch CSV statistics');
@@ -144,11 +127,7 @@ export default function AdminPage() {
     setIsLoadingCsvData(true);
     setCsvError('');
     try {
-      const response = await fetch(`/api/csv-data?page=${page}&limit=20`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-      });
+      const response = await fetch(`/api/csv-data?page=${page}&limit=20`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch CSV data');
@@ -179,11 +158,7 @@ export default function AdminPage() {
     setIsDownloadingCsv(true);
     setCsvError('');
     try {
-      const response = await fetch('/api/download-csv', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-      });
+      const response = await fetch('/api/download-csv');
       
       if (!response.ok) {
         throw new Error('Failed to download CSV file');
@@ -212,18 +187,6 @@ export default function AdminPage() {
   const wordCount = textInput.trim().split(/\s+/).filter(word => word.length > 0).length;
   const charCount = textInput.length;
 
-  // Show loading while checking auth
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-gray-600 dark:text-gray-400">
-          <span className="animate-spin mr-2">⟳</span>
-          Checking authentication...
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-black">
       <div className="container mx-auto px-4 py-4 sm:py-8 max-w-6xl">
@@ -240,12 +203,6 @@ export default function AdminPage() {
               >
                 ← Back to Main
               </a>
-              <button
-                onClick={logout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-sm sm:text-base"
-              >
-                Logout
-              </button>
             </div>
           </div>
           <p className="text-gray-300 text-sm sm:text-base">

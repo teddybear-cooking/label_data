@@ -346,9 +346,17 @@ export default function Home() {
     <div className="min-h-screen bg-black text-white">
       <div className="container mx-auto px-4 py-4 sm:py-8 max-w-4xl">
         {/* Title */}
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center mb-6 sm:mb-8 text-white">
-          collecting sentences to train the model
-        </h1>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 gap-4 sm:gap-0">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center sm:text-left text-white">
+            collecting sentences to train the model
+          </h1>
+          <a 
+            href="/admin" 
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-center text-sm sm:text-base w-full sm:w-auto"
+          >
+            Admin Panel
+          </a>
+        </div>
 
         {/* Main Form Section */}
         <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500 mb-4 sm:mb-6">
