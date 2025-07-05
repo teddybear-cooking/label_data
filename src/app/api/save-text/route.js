@@ -8,10 +8,10 @@ import { checkAuthHeader } from '../../../utils/auth';
 
 export async function POST(request) {
   try {
-    // Check authentication
-    if (!checkAuthHeader(request)) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Remove authentication check for now
+    // if (!checkAuthHeader(request)) {
+    //   return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // }
 
     const { text } = await request.json();
     

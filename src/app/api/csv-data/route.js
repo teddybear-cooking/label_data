@@ -7,10 +7,10 @@ import { checkAuthHeader } from '../../../utils/auth';
 
 export async function GET(request) {
   try {
-    // Check authentication
-    if (!checkAuthHeader(request)) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // Remove authentication check for now
+    // if (!checkAuthHeader(request)) {
+    //   return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
