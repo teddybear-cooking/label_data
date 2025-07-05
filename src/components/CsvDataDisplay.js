@@ -122,9 +122,23 @@ export default function CsvDataDisplay({ refreshTrigger }) {
       const result = await response.json();
       
       if (result.success) {
+        // Show success message
+        console.log('CSV cleared successfully:', result);
+        
+        // Reset all local state immediately
+        setCsvStats(null);
+        setCsvData(null);
+        setCsvCurrentPage(1);
+        
         // Refresh the data after clearing
-        fetchCsvStats();
+        await fetchCsvStats();
         setCsvError(''); // Clear any previous errors
+        
+        // Show temporary success message
+        setCsvError('✅ CSV file cleared successfully!');
+        setTimeout(() => {
+          setCsvError('');
+        }, 3000);
       } else {
         throw new Error(result.error || 'Failed to clear CSV file');
       }
@@ -194,9 +208,13 @@ export default function CsvDataDisplay({ refreshTrigger }) {
         </div>
       </div>
 
-      {/* CSV Error Display */}
+      {/* CSV Error/Success Display */}
       {csvError && (
-        <div className="mb-3 p-2 rounded-lg bg-red-900/80 border border-red-600 text-red-200 text-sm lg:text-base">
+        <div className={`mb-3 p-2 rounded-lg text-sm lg:text-base ${
+          csvError.includes('✅') 
+            ? 'bg-green-900/80 border border-green-600 text-green-200' 
+            : 'bg-red-900/80 border border-red-600 text-red-200'
+        }`}>
           {csvError}
         </div>
       )}
