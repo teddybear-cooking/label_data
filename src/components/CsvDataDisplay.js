@@ -8,6 +8,7 @@ export default function CsvDataDisplay({ refreshTrigger }) {
   const [csvCurrentPage, setCsvCurrentPage] = useState(1);
   const [csvError, setCsvError] = useState('');
   const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
+  const [isClearingCsv, setIsClearingCsv] = useState(false);
 
   const fetchCsvStats = async () => {
     setIsLoadingCsvStats(true);
@@ -94,6 +95,48 @@ export default function CsvDataDisplay({ refreshTrigger }) {
     }
   };
 
+  const handleClearCsv = async () => {
+    // Show confirmation dialog
+    const confirmClear = window.confirm(
+      'Are you sure you want to clear all CSV data? This action cannot be undone.'
+    );
+    
+    if (!confirmClear) {
+      return;
+    }
+
+    setIsClearingCsv(true);
+    setCsvError('');
+    try {
+      const response = await fetch('/api/clear-csv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to clear CSV file');
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Refresh the data after clearing
+        fetchCsvStats();
+        setCsvError(''); // Clear any previous errors
+      } else {
+        throw new Error(result.error || 'Failed to clear CSV file');
+      }
+      
+    } catch (error) {
+      console.error('Error clearing CSV file:', error);
+      setCsvError('Failed to clear CSV file');
+    } finally {
+      setIsClearingCsv(false);
+    }
+  };
+
   // Load CSV stats on mount and when refreshTrigger changes
   useEffect(() => {
     fetchCsvStats();
@@ -132,6 +175,20 @@ export default function CsvDataDisplay({ refreshTrigger }) {
               </span>
             ) : (
               '🔄 Refresh'
+            )}
+          </button>
+          <button
+            onClick={handleClearCsv}
+            disabled={!csvStats?.exists || isClearingCsv || isLoadingCsvStats || isLoadingCsvData}
+            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base w-full sm:w-auto"
+          >
+            {isClearingCsv ? (
+              <span className="flex items-center justify-center">
+                <span className="animate-spin mr-2">⟳</span>
+                Clearing...
+              </span>
+            ) : (
+              '🗑️ Clear CSV'
             )}
           </button>
         </div>
