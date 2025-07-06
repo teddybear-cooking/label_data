@@ -8,6 +8,7 @@ export default function DownloadPage() {
   const [fileStats, setFileStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [setupSql, setSetupSql] = useState('');
 
   // Use page persistence hook
   usePagePersistence('data');
@@ -18,16 +19,29 @@ export default function DownloadPage() {
 
   const fetchFileStats = async () => {
     setIsLoading(true);
+    setError('');
+    setSetupSql('');
+    
     try {
       const response = await fetch('/api/csv-stats');
-      if (!response.ok) {
-        throw new Error('Failed to fetch file statistics');
-      }
       const data = await response.json();
+      
+      if (!response.ok) {
+        if (data.error === 'Database table not found') {
+          setError(data.message || 'Database table not found. Please create the training_data table in your Supabase SQL editor.');
+          if (data.sql) {
+            setSetupSql(data.sql);
+          }
+        } else {
+          setError(data.error || 'Failed to fetch file statistics');
+        }
+        return;
+      }
+      
       setFileStats(data);
     } catch (err) {
       console.error('Error fetching file stats:', err);
-      setError('Failed to load file statistics');
+      setError('Failed to load file statistics. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
@@ -119,8 +133,23 @@ export default function DownloadPage() {
         {/* Error State */}
         {error && (
           <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
-            <div className="text-red-200 text-center py-8">
-              {error}
+            <div className="text-red-200 text-center py-4">
+              <h3 className="text-lg font-semibold mb-2">⚠️ Setup Required</h3>
+              <p className="mb-4">{error}</p>
+              {setupSql && (
+                <div className="text-left bg-gray-800 p-4 rounded-lg border">
+                  <p className="text-yellow-300 mb-2 text-sm">Run this SQL in your Supabase SQL editor:</p>
+                  <pre className="text-green-300 text-xs overflow-x-auto whitespace-pre-wrap">
+                    {setupSql.trim()}
+                  </pre>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(setupSql.trim())}
+                    className="mt-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs"
+                  >
+                    📋 Copy SQL
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

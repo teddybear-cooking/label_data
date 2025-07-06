@@ -56,7 +56,12 @@ export async function POST(request) {
         
         if (!createResult.success) {
           console.error('Failed to create table:', createResult.error);
-          throw new Error(`Failed to create table: ${createResult.error}`);
+          return Response.json({
+            success: false,
+            error: 'Database table not found',
+            message: 'Please create the training_data table in your Supabase SQL editor first',
+            sql: createResult.sql
+          }, { status: 400 });
         }
         
         // Try insert again after creating table

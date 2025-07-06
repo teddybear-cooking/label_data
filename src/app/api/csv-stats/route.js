@@ -68,7 +68,17 @@ export async function GET(request) {
         
         if (!createResult.success) {
           console.error('Failed to create table:', createResult.error);
-          throw new Error(`Failed to create table: ${createResult.error}`);
+          return Response.json({
+            exists: false,
+            totalEntries: 0,
+            fileSize: 0,
+            labelCounts: {},
+            sampleEntries: [],
+            error: 'Database table not found',
+            message: 'Please create the training_data table in your Supabase SQL editor',
+            sql: createResult.sql,
+            storage: 'database'
+          }, { status: 400 });
         }
         
         return Response.json({
