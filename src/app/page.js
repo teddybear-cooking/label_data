@@ -353,18 +353,20 @@ export default function Home() {
 
     // Set loading state immediately for smooth UX
     setIsSavingMain(true);
+    
+    // Store current values for rollback if needed
+    const currentText = textInput;
+    const currentCategory = selectedCategory;
 
-    console.log('=== FRONTEND SAVE REQUEST ===');
-    console.log('Text to save:', textInput.trim());
-    console.log('Selected label:', selectedCategory);
+    // Optimistically update UI
+    setTextInput('');
+    setSelectedCategory('');
 
     try {
       const requestData = { 
-        text: textInput.trim(),
-        label: selectedCategory
+        text: currentText.trim(),
+        label: currentCategory
       };
-      
-      console.log('Sending request data:', requestData);
 
       const response = await fetch('/api/save-csv', {
         method: 'POST',
@@ -374,33 +376,26 @@ export default function Home() {
         body: JSON.stringify(requestData)
       });
 
-      console.log('Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('Server error:', errorData);
         throw new Error(errorData.error || 'Failed to save data');
       }
 
       const result = await response.json();
-      console.log('✅ Success response:', result);
       
-      // Verify the save was successful
-      if (result.success && result.fileExists) {
-        console.log('✅ Data saved successfully:', result.text, '|', result.label);
-        
-        // Reset form only after successful save
-        setTextInput('');
-        setSelectedCategory('');
-      } else {
-        throw new Error('Save operation may have failed - file verification failed');
+      if (!result.success) {
+        throw new Error('Save operation failed');
       }
       
     } catch (error) {
       console.error('Error saving data:', error);
-      alert('❌ Failed to save data. Please try again.');
+      // Rollback on error
+      setTextInput(currentText);
+      setSelectedCategory(currentCategory);
+      // Show error in UI instead of alert
+      setError('Failed to save. Please try again.');
+      setTimeout(() => setError(''), 3000);
     } finally {
-      // Always reset loading state
       setIsSavingMain(false);
     }
   };
@@ -471,23 +466,38 @@ export default function Home() {
 
   const handleReadonlySubmit = async () => {
     if (!readonlyText.trim() || readonlyText.includes('No sentences available') || readonlyText.includes('Unable to load sentence')) {
-      alert('⚠️ No valid text to save. Please fetch a sentence first.');
+      setError('⚠️ No valid text to save. Please fetch a sentence first.');
+      setTimeout(() => setError(''), 3000);
       return;
     }
     
     if (!readonlyCategory) {
-      alert('⚠️ Please select a category before saving.');
+      setError('⚠️ Please select a category before saving.');
+      setTimeout(() => setError(''), 3000);
       return;
     }
 
     // Set loading state immediately for smooth UX
     setIsSavingReadonly(true);
+    
+    // Store current values for potential rollback
+    const currentText = readonlyText;
+    const currentCategory = readonlyCategory;
+    const currentId = currentSentenceId;
+
+    // Optimistically clear localStorage and fetch next sentence
+    localStorage.removeItem('currentSentence');
+    localStorage.removeItem('currentSentenceId');
+    localStorage.removeItem('currentSentenceCategory');
+    
+    // Start fetching next sentence in parallel
+    const nextSentencePromise = fetch('/api/fetch-sentence');
 
     try {
       const requestData = { 
-        text: readonlyText.trim(),
-        label: readonlyCategory,
-        sentenceId: currentSentenceId
+        text: currentText.trim(),
+        label: currentCategory,
+        sentenceId: currentId
       };
 
       const response = await fetch('/api/save-csv', {
@@ -505,27 +515,54 @@ export default function Home() {
 
       const result = await response.json();
       
-      if (result.success && result.fileExists) {
-        console.log('✅ Readonly data saved successfully:', result.text, '|', result.label);
+      if (result.success) {
+        // Use the already started fetch request
+        const nextSentenceResponse = await nextSentencePromise;
+        if (!nextSentenceResponse.ok) {
+          throw new Error('Failed to fetch next sentence');
+        }
+        const nextSentenceResult = await nextSentenceResponse.json();
         
-        // Clear localStorage since sentence was saved and marked as used
-        localStorage.removeItem('currentSentence');
-        localStorage.removeItem('currentSentenceId');
-        localStorage.removeItem('currentSentenceCategory');
-        
-        // Automatically fetch a new sentence and reset category
-        await fetchNewSentence();
+        if (nextSentenceResult.success && nextSentenceResult.sentence) {
+          setReadonlyText(nextSentenceResult.sentence);
+          setCurrentSentenceId(nextSentenceResult.sentenceId);
+          setReadonlyCategory('');
+        } else {
+          handleNextSentenceError(nextSentenceResult);
+        }
       } else {
-        throw new Error('Save operation may have failed');
+        throw new Error('Save operation failed');
       }
       
     } catch (error) {
       console.error('Error saving readonly data:', error);
-      alert('❌ Failed to save data. Please try again.');
+      // Rollback on error
+      setReadonlyText(currentText);
+      setReadonlyCategory(currentCategory);
+      setCurrentSentenceId(currentId);
+      // Restore localStorage
+      localStorage.setItem('currentSentence', currentText);
+      localStorage.setItem('currentSentenceId', currentId.toString());
+      localStorage.setItem('currentSentenceCategory', currentCategory);
+      // Show error in UI instead of alert
+      setError('Failed to save. Please try again.');
+      setTimeout(() => setError(''), 3000);
     } finally {
-      // Always reset loading state
       setIsSavingReadonly(false);
     }
+  };
+
+  // Helper function to handle next sentence errors
+  const handleNextSentenceError = (result) => {
+    if (result.error === 'Database tables not found') {
+      setReadonlyText('Database setup required. Please create the required tables in Supabase first.');
+    } else if (result.message && result.message.includes('No sentences available')) {
+      setReadonlyText('No sentences available. Please submit paragraphs in the Admin Panel first.');
+    } else {
+      setReadonlyText('No sentences available.');
+    }
+    setCurrentSentenceId(null);
+    setReadonlyCategory('');
   };
 
   // Load initial sentence when component mounts (only if not already loaded from localStorage)
