@@ -1,9 +1,4 @@
-import { 
-  STORAGE_BUCKETS, 
-  downloadFromStorage, 
-  uploadToStorage, 
-  fileExistsInStorage 
-} from '../../../utils/supabase.js';
+import { supabaseAdmin, createTrainingDataTable } from '../../../utils/supabase.js';
 
 export async function POST(request) {
   try {
@@ -22,55 +17,71 @@ export async function POST(request) {
       return Response.json({ error: 'Label is required' }, { status: 400 });
     }
 
-    // Use a single CSV filename
-    const filename = 'training_data.csv';
-    
-    console.log('Saving to Supabase storage bucket:', STORAGE_BUCKETS.CSV_DATA);
-    
-    // Clean the text (remove tabs and newlines for CSV format)
-    const cleanText = text.replace(/\t/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ').trim();
+    // Clean the text (remove excessive whitespace)
+    const cleanText = text.replace(/\s+/g, ' ').trim();
     const cleanLabel = label.trim();
     
-    // Create CSV row (tab-separated)
-    const csvRow = `${cleanText}\t${cleanLabel}\n`;
-    console.log('CSV row to append:', JSON.stringify(csvRow));
+    console.log('Inserting row into database table...');
     
     try {
-      // Check if file exists in Supabase storage
-      const fileExists = await fileExistsInStorage(STORAGE_BUCKETS.CSV_DATA, filename);
-      let existingContent = '';
+      // Insert directly into Supabase table - much more efficient than CSV file operations
+      const { data, error } = await supabaseAdmin
+        .from('training_data')
+        .insert([
+          {
+            text: cleanText,
+            label: cleanLabel,
+            created_at: new Date().toISOString()
+          }
+        ])
+        .select();
       
-      if (fileExists) {
-        // Download existing content
-        const downloadResult = await downloadFromStorage(STORAGE_BUCKETS.CSV_DATA, filename);
-        if (downloadResult.success) {
-          existingContent = downloadResult.data;
-          console.log('Downloaded existing CSV content');
-        } else {
-          console.warn('Failed to download existing CSV content:', downloadResult.error);
+      if (error) {
+        console.error('Database insert error:', error);
+        throw new Error(`Database insert failed: ${error.message}`);
+      }
+      
+      console.log('✅ Successfully inserted row into database');
+      console.log('✅ Inserted data:', data);
+      
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      
+      // If table doesn't exist, create it and try again
+      if (dbError.message.includes('relation "training_data" does not exist') || 
+          dbError.message.includes('table "training_data" does not exist')) {
+        console.log('Creating training_data table...');
+        
+        const createResult = await createTrainingDataTable();
+        
+        if (!createResult.success) {
+          console.error('Failed to create table:', createResult.error);
+          throw new Error(`Failed to create table: ${createResult.error}`);
         }
+        
+        // Try insert again after creating table
+        const { data, error: retryError } = await supabaseAdmin
+          .from('training_data')
+          .insert([
+            {
+              text: cleanText,
+              label: cleanLabel,
+              created_at: new Date().toISOString()
+            }
+          ])
+          .select();
+        
+        if (retryError) {
+          throw new Error(`Retry insert failed: ${retryError.message}`);
+        }
+        
+        console.log('✅ Successfully inserted row into newly created table');
+      } else {
+        throw dbError;
       }
-      
-      // Append new row to existing content
-      const newContent = existingContent + csvRow;
-      
-      // Upload updated content to Supabase storage
-      const uploadResult = await uploadToStorage(STORAGE_BUCKETS.CSV_DATA, filename, newContent);
-      
-      if (!uploadResult.success) {
-        throw new Error(`Failed to upload to Supabase storage: ${uploadResult.error}`);
-      }
-      
-      console.log('✅ Successfully saved to Supabase storage');
-    } catch (storageError) {
-      console.error('Storage error:', storageError);
-      throw new Error(`Failed to save to storage: ${storageError.message}`);
     }
     
-    // Verify the upload was successful
-    const verifyExists = await fileExistsInStorage(STORAGE_BUCKETS.CSV_DATA, filename);
-    
-    console.log(`✅ Data confirmed saved to CSV in Supabase: ${filename}`);
+    console.log(`✅ Data saved to database table`);
     console.log(`✅ Text: "${cleanText}" | Label: "${cleanLabel}"`);
     console.log('=== CSV SAVE REQUEST COMPLETED ===');
     
@@ -79,14 +90,14 @@ export async function POST(request) {
       text: cleanText,
       label: cleanLabel,
       timestamp: new Date().toISOString(),
-      fileExists: verifyExists,
-      storage: 'supabase'
+      fileExists: true, // Keep for compatibility
+      storage: 'database'
     });
     
   } catch (error) {
-    console.error('Error saving to CSV:', error);
+    console.error('Error saving to database:', error);
     return Response.json(
-      { error: 'Failed to save to CSV file' }, 
+      { error: 'Failed to save to database' }, 
       { status: 500 }
     );
   }

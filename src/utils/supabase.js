@@ -124,4 +124,67 @@ export async function getFileInfo(bucket, fileName) {
     console.error(`Error getting file info from storage bucket ${bucket}:`, error)
     return { success: false, error: error.message }
   }
+}
+
+// Helper function to create training_data table if it doesn't exist
+export async function createTrainingDataTable() {
+  try {
+    console.log('Creating training_data table...');
+    
+    // Use direct SQL execution to create the table
+    const { data, error } = await supabaseAdmin
+      .from('training_data')
+      .select('id')
+      .limit(1);
+    
+    // If the query succeeds, table already exists
+    if (!error) {
+      console.log('✅ training_data table already exists');
+      return { success: true };
+    }
+    
+    // If table doesn't exist, we need to create it
+    // Since we can't execute CREATE TABLE directly via the client,
+    // we'll return an error with instructions
+    if (error.message.includes('relation "training_data" does not exist') || 
+        error.message.includes('table "training_data" does not exist')) {
+      
+      console.log('⚠️  training_data table does not exist');
+      console.log('Please create the table manually in your Supabase SQL editor:');
+      console.log(`
+        CREATE TABLE training_data (
+          id SERIAL PRIMARY KEY,
+          text TEXT NOT NULL,
+          label TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        
+        CREATE INDEX idx_training_data_label ON training_data(label);
+        CREATE INDEX idx_training_data_created_at ON training_data(created_at);
+      `);
+      
+      return { 
+        success: false, 
+        error: 'Table does not exist. Please create it manually in Supabase SQL editor.',
+        sql: `
+          CREATE TABLE training_data (
+            id SERIAL PRIMARY KEY,
+            text TEXT NOT NULL,
+            label TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          
+          CREATE INDEX idx_training_data_label ON training_data(label);
+          CREATE INDEX idx_training_data_created_at ON training_data(created_at);
+        `
+      };
+    }
+    
+    // For other errors, just return the error
+    return { success: false, error: error.message };
+    
+  } catch (error) {
+    console.error('Error checking/creating training_data table:', error);
+    return { success: false, error: error.message };
+  }
 } 
