@@ -59,7 +59,14 @@ export default function Home() {
   const [isSavingMain, setIsSavingMain] = useState(false);
   const [isSavingReadonly, setIsSavingReadonly] = useState(false);
 
-  // Remove sentence predictions state
+  // State for sentence predictions
+  const [sentencePredictions, setSentencePredictions] = useState({
+    'normal': 0,
+    'hate speech': 0,
+    'offensive': 0,
+    'religious hate': 0,
+    'political hate': 0
+  });
   const [isSentencePredictionLoading, setIsSentencePredictionLoading] = useState(false);
   const [sentencePredictionError, setSentencePredictionError] = useState('');
 
@@ -641,206 +648,266 @@ export default function Home() {
         {/* Header with Navigation Toggle */}
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 gap-4 sm:gap-0">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
-            Text Labeling
+            Text Labeling Tool
           </h1>
           <NavigationToggle currentPage="main" />
         </div>
 
-        {/* Main Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Manual Input */}
-          <div className="flex flex-col gap-6">
-            {/* Text Input Form */}
-            <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 lg:p-6 border border-slate-500">
-              {/* Header */}
-              <div className="mb-4">
-                <h2 className="text-lg lg:text-xl font-semibold text-white">
-                  Write
-                </h2>
-                <div className="text-center text-xs lg:text-sm text-gray-300 mt-2">
-                  <span className="block sm:inline">normal • hate speech • offensive</span>
-                  <span className="block sm:inline sm:ml-2">religious hate • political hate</span>
-                </div>
-              </div>
+        {/* Main Form Section */}
+        <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500 mb-4 sm:mb-6">
+          {/* Header */}
+          <div className="mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl font-semibold text-white">
+              Write anything under these categories
+            </h2>
+          </div>
 
-              {/* Error Display */}
-              {error && (
-                <div className="mb-3 p-2 bg-red-900/80 border border-red-600 text-red-200 rounded-lg text-sm">
-                  {error}
+          {/* Error Display */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-900/80 border border-red-600 text-red-200 rounded-lg text-sm sm:text-base">
+              {error}
+            </div>
+          )}
+
+          {/* Categories Display */}
+          <div className="mb-4">
+            <div className="text-center text-xs sm:text-sm text-gray-300 px-2">
+              <span className="block sm:inline">normal • hate speech • offensive</span>
+              <span className="block sm:inline sm:ml-2">religious hate • political hate</span>
+            </div>
+          </div>
+
+          {/* Text Input */}
+          <div className="mb-4 sm:mb-6">
+            <textarea
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              placeholder="write offensive words for a sentence"
+              className="w-full p-3 sm:p-4 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-500 text-sm sm:text-base"
+              rows={4}
+            />
+            <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-0">
+              <div>
+                {textInput.trim().length === 0 && !isLoading && (
+                  <div className="text-xs sm:text-sm text-gray-400">
+                    sentence classification result 0% all class
+                  </div>
+                )}
+                {isLoading && (
+                  <div className="text-xs sm:text-sm text-gray-300 flex items-center">
+                    <span className="animate-spin mr-2">⟳</span>
+                    Analyzing text...
+                  </div>
+                )}
+                {!isLoading && textInput.trim().length >= 3 && (
+                  <div className="text-xs sm:text-sm text-green-400 flex items-center">
+                    <span className="mr-2">✓</span>
+                    Predictions updated
+                  </div>
+                )}
+                {textInput.trim() && textInput.trim().length < 3 && !isLoading && (
+                  <div className="text-xs sm:text-sm text-gray-300">
+                    Type at least 3 characters to see predictions
+                  </div>
+                )}
+              </div>
+              
+              {/* Top 2 Predictions */}
+              {!isLoading && textInput.trim().length >= 3 && (
+                <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-end">
+                  {getTop2Predictions().map((prediction, index) => (
+                    <CategoryDisplay
+                      key={prediction.category}
+                      category={prediction.category}
+                      percentage={prediction.percentage}
+                      isLoading={false}
+                    />
+                  ))}
                 </div>
               )}
+            </div>
+          </div>
 
-              {/* Text Input */}
-              <div className="mb-4">
-                <textarea
-                  value={textInput}
-                  onChange={(e) => setTextInput(e.target.value)}
-                  placeholder="Write your text here..."
-                  className="w-full p-3 lg:p-4 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-500 text-sm lg:text-base"
-                  rows={4}
-                />
-                <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-0">
-                  <div className="flex flex-col gap-1">
-                    <div className="text-xs lg:text-sm text-gray-400">
-                      {textInput.length} characters • {textInput.trim().split(/\s+/).filter(w => w.length > 0).length} words
-                    </div>
-                    {textInput.trim().length === 0 && !isLoading && (
-                      <div className="text-xs lg:text-sm text-gray-400">
-                        Type to see predictions
-                      </div>
-                    )}
-                    {isLoading && (
-                      <div className="text-xs lg:text-sm text-gray-300 flex items-center">
-                        <span className="animate-spin mr-2">⟳</span>
-                        Analyzing text...
-                      </div>
-                    )}
-                    {!isLoading && textInput.trim().length >= 3 && (
-                      <div className="text-xs lg:text-sm text-green-400 flex items-center">
-                        <span className="mr-2">✓</span>
-                        Predictions updated
-                      </div>
-                    )}
+          {/* Category Selection */}
+          <div className="mb-4 sm:mb-6">
+            <p className="text-sm sm:text-base font-medium text-gray-200 mb-3">
+              Select a category:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+              {categories.map((category) => (
+                <label
+                  key={category}
+                  className="flex items-center space-x-3 cursor-pointer hover:bg-[#254761] p-3 rounded-lg border border-slate-400 bg-[#1e4558]/70 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedCategory === category}
+                    onChange={() => handleCategoryChange(category)}
+                    className="w-4 h-4 text-blue-400 bg-white border-gray-400 rounded focus:ring-blue-400 focus:ring-2"
+                  />
+                  <span className="text-sm sm:text-base font-medium text-gray-200 capitalize flex-1">
+                    {category}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Submit Button - Only visible when both text and category are selected */}
+          {canSubmit && (
+            <div className="flex justify-center">
+              <button
+                onClick={handleSubmit}
+                disabled={isSavingMain}
+                className={`font-semibold py-3 px-6 sm:px-8 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm sm:text-base w-full sm:w-auto transform ${
+                  isSavingMain 
+                    ? 'bg-blue-400 cursor-not-allowed scale-95' 
+                    : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 active:scale-95'
+                } text-white`}
+              >
+                {isSavingMain ? (
+                  <span className="flex items-center justify-center">
+                    <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                    Saving...
+                  </span>
+                ) : (
+                  'Save to CSV'
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Readonly Sentence Section */}
+        <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-3 sm:gap-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-white">
+              Label this sentence
+            </h2>
+            <button
+              onClick={fetchNewSentence}
+              disabled={isLoadingSentence}
+              className={`px-4 py-2 rounded-lg transition-all duration-200 text-sm sm:text-base w-full sm:w-auto transform ${
+                isLoadingSentence 
+                  ? 'bg-gray-400 cursor-not-allowed scale-95' 
+                  : 'bg-green-600 hover:bg-green-700 hover:scale-105 active:scale-95'
+              } text-white`}
+            >
+              {isLoadingSentence ? (
+                <span className="flex items-center justify-center">
+                  <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                  Loading...
+                </span>
+              ) : (
+                'Get New Sentence'
+              )}
+            </button>
+          </div>
+
+          {/* Readonly Text Display */}
+          <div className="mb-4 sm:mb-6">
+            <textarea
+              value={readonlyText}
+              readOnly
+              placeholder="Click 'Get New Sentence' to load text for labeling..."
+              className="w-full p-3 sm:p-4 border border-gray-400 rounded-lg resize-none bg-white text-black cursor-default text-sm sm:text-base"
+              rows={3}
+            />
+            <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-0">
+              <div>
+                {readonlyText.trim().length === 0 && !isSentencePredictionLoading && (
+                  <div className="text-xs sm:text-sm text-gray-400">
+                    sentence classification result 0% all class
                   </div>
-                  
-                  {/* Top 2 Predictions */}
-                  {!isLoading && textInput.trim().length >= 3 && (
-                    <div className="flex flex-wrap gap-2 lg:gap-3 justify-center sm:justify-end">
-                      {getTop2Predictions().map((prediction, index) => (
-                        <CategoryDisplay
-                          key={prediction.category}
-                          category={prediction.category}
-                          percentage={prediction.percentage}
-                          isLoading={false}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
+                )}
+                {isSentencePredictionLoading && (
+                  <div className="text-xs sm:text-sm text-gray-300 flex items-center">
+                    <span className="animate-spin mr-2">⟳</span>
+                    Analyzing sentence...
+                  </div>
+                )}
+                {!isSentencePredictionLoading && readonlyText.trim().length >= 3 && !readonlyText.includes('No sentences available') && !readonlyText.includes('Database setup required') && (
+                  <div className="text-xs sm:text-sm text-green-400 flex items-center">
+                    <span className="mr-2">✓</span>
+                    Sentence predictions updated
+                  </div>
+                )}
+                {readonlyText.trim() && readonlyText.trim().length < 3 && !isSentencePredictionLoading && (
+                  <div className="text-xs sm:text-sm text-gray-300">
+                    Sentence too short for predictions
+                  </div>
+                )}
               </div>
-
-              {/* Category Selection */}
-              <div className="mb-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {categories.map(category => (
-                    <button
-                      key={category}
-                      onClick={() => handleCategoryChange(category)}
-                      className={`py-2 px-3 rounded-lg text-sm lg:text-base font-medium transition-all duration-200 ${
-                        selectedCategory === category
-                          ? 'bg-blue-600 text-white transform scale-105'
-                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                      }`}
-                    >
-                      {category}
-                    </button>
+              
+              {/* Top 2 Sentence Predictions */}
+              {!isSentencePredictionLoading && readonlyText.trim().length >= 3 && !readonlyText.includes('No sentences available') && !readonlyText.includes('Database setup required') && !readonlyText.includes('Unable to load sentence') && (
+                <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-end">
+                  {getTop2SentencePredictions().map((prediction, index) => (
+                    <CategoryDisplay
+                      key={prediction.category}
+                      category={prediction.category}
+                      percentage={prediction.percentage}
+                      isLoading={false}
+                    />
                   ))}
                 </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="flex justify-center">
-                <button
-                  onClick={handleSubmit}
-                  disabled={!canSubmit}
-                  className={`font-semibold py-2 px-6 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm lg:text-base ${
-                    canSubmit
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white transform hover:scale-105 active:scale-95'
-                      : 'bg-gray-600 text-gray-300 cursor-not-allowed'
-                  }`}
-                >
-                  {isSavingMain ? (
-                    <span className="flex items-center">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Saving...
-                    </span>
-                  ) : (
-                    'Submit'
-                  )}
-                </button>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Right Column - Random Sentence */}
-          <div className="flex flex-col gap-6">
-            {/* Random Sentence Display */}
-            <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 lg:p-6 border border-slate-500">
-              {/* Header */}
-              <div className="mb-4">
-                <h2 className="text-lg lg:text-xl font-semibold text-white">
-                  Label Random Sentence
-                </h2>
-                <div className="text-center text-xs lg:text-sm text-gray-300 mt-2">
-                  Select a category for the displayed sentence
-                </div>
-              </div>
-
-              {/* Sentence Display */}
-              <div className="mb-4">
-                <div className="bg-slate-700/50 p-3 lg:p-4 rounded-lg border border-slate-600">
-                  {isLoadingSentence ? (
-                    <div className="flex items-center justify-center text-gray-300">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Loading sentence...
-                    </div>
-                  ) : (
-                    <p className="text-sm lg:text-base text-gray-200">
-                      {readonlyText}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Category Selection */}
-              <div className="mb-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {categories.map(category => (
-                    <button
-                      key={category}
-                      onClick={() => handleReadonlyCategoryChange(category)}
-                      className={`py-2 px-3 rounded-lg text-sm lg:text-base font-medium transition-all duration-200 ${
-                        readonlyCategory === category
-                          ? 'bg-green-600 text-white transform scale-105'
-                          : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-                      }`}
-                    >
-                      {category}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
-                <button
-                  onClick={handleReadonlySubmit}
-                  disabled={!canSubmitReadonly}
-                  className={`flex-1 font-semibold py-2 px-4 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm lg:text-base ${
-                    canSubmitReadonly
-                      ? 'bg-green-600 hover:bg-green-700 text-white transform hover:scale-105 active:scale-95'
-                      : 'bg-gray-600 text-gray-300 cursor-not-allowed'
-                  }`}
+          {/* Category Selection for Readonly */}
+          <div className="mb-4 sm:mb-6">
+            <p className="text-sm sm:text-base font-medium text-gray-200 mb-3">
+              Select a category for this sentence:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+              {categories.map((category) => (
+                <label
+                  key={category}
+                  className="flex items-center space-x-3 cursor-pointer hover:bg-[#254761] p-3 rounded-lg border border-slate-400 bg-[#1e4558]/70 transition-colors"
                 >
-                  {isSavingReadonly ? (
-                    <span className="flex items-center justify-center">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Saving...
-                    </span>
-                  ) : (
-                    'Submit & Next'
-                  )}
-                </button>
-                <button
-                  onClick={fetchNewSentence}
-                  disabled={isLoadingSentence}
-                  className="flex-1 bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm lg:text-base disabled:bg-gray-600 disabled:text-gray-300 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
-                >
-                  Skip
-                </button>
-              </div>
+                  <input
+                    type="checkbox"
+                    checked={readonlyCategory === category}
+                    onChange={() => handleReadonlyCategoryChange(category)}
+                    className="w-4 h-4 text-blue-400 bg-white border-gray-400 rounded focus:ring-blue-400 focus:ring-2"
+                  />
+                  <span className="text-sm sm:text-base font-medium text-gray-200 capitalize flex-1">
+                    {category}
+                  </span>
+                </label>
+              ))}
             </div>
           </div>
+
+          {/* Submit Button for Readonly */}
+          {canSubmitReadonly && (
+            <div className="flex justify-center">
+              <button
+                onClick={handleReadonlySubmit}
+                disabled={isSavingReadonly}
+                className={`font-semibold py-3 px-6 sm:px-8 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm sm:text-base w-full sm:w-auto transform ${
+                  isSavingReadonly 
+                    ? 'bg-purple-400 cursor-not-allowed scale-95' 
+                    : 'bg-purple-600 hover:bg-purple-700 hover:scale-105 active:scale-95'
+                } text-white`}
+              >
+                {isSavingReadonly ? (
+                  <span className="flex items-center justify-center">
+                    <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                    Saving...
+                  </span>
+                ) : (
+                  'Save Label'
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Instructions */}
+        <div className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400">
+          <p>Write your own text or label provided sentences to contribute training data.</p>
         </div>
       </div>
     </div>
