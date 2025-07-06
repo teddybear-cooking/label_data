@@ -22,12 +22,18 @@ export default function AdminPage() {
     setMessage('');
 
     try {
+      // Clean the text - remove extra spaces and normalize whitespace
+      const cleanedText = textInput
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .replace(/\n\s*\n/g, '\n') // Replace multiple newlines with single newline
+        .trim(); // Remove leading/trailing whitespace
+
       const response = await fetch('/api/save-text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: textInput.trim() })
+        body: JSON.stringify({ text: cleanedText })
       });
 
       if (!response.ok) {
@@ -38,7 +44,7 @@ export default function AdminPage() {
       const result = await response.json();
       
       if (result.success) {
-        setMessage('✅ Text submitted successfully!');
+        setMessage('✅ Paragraph submitted successfully! Sentences will be available for labeling.');
         setTextInput(''); // Clear the form
         
         // Clear success message after 3 seconds
@@ -49,7 +55,15 @@ export default function AdminPage() {
       
     } catch (error) {
       console.error('Error submitting text:', error);
-      setMessage('❌ Failed to submit text. Please try again.');
+      
+      // Check if it's a database setup error
+      if (error.message.includes('Database tables not found') || 
+          error.message.includes('relation') || 
+          error.message.includes('table')) {
+        setMessage('❌ Database tables need to be created. Please run the SQL commands in your Supabase SQL editor first.');
+      } else {
+        setMessage('❌ Failed to submit text. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }

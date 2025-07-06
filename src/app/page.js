@@ -270,8 +270,14 @@ export default function Home() {
         setReadonlyCategory(''); // Reset category when new sentence loads
         console.log('Fetched new sentence:', result.sentence);
       } else {
-        // No sentences available from file
-        setReadonlyText('No sentences available.');
+        // Handle different error cases
+        if (result.error === 'Database tables not found') {
+          setReadonlyText('Database setup required. Please create the required tables in Supabase first.');
+        } else if (result.message && result.message.includes('No sentences available')) {
+          setReadonlyText('No sentences available. Please submit paragraphs in the Admin Panel first.');
+        } else {
+          setReadonlyText('No sentences available.');
+        }
         setReadonlyCategory('');
         console.log('No sentences available:', result.message);
       }
