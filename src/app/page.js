@@ -59,6 +59,17 @@ export default function Home() {
   const [isSavingMain, setIsSavingMain] = useState(false);
   const [isSavingReadonly, setIsSavingReadonly] = useState(false);
 
+  // State for sentence predictions
+  const [sentencePredictions, setSentencePredictions] = useState({
+    'normal': 0,
+    'hate speech': 0,
+    'offensive': 0,
+    'religious hate': 0,
+    'political hate': 0
+  });
+  const [isSentencePredictionLoading, setIsSentencePredictionLoading] = useState(false);
+  const [sentencePredictionError, setSentencePredictionError] = useState('');
+
   // Use page persistence hook
   usePagePersistence('main');
 
@@ -91,6 +102,10 @@ export default function Home() {
   const cache = useRef(new Map()); // Cache for responses
   const currentRequest = useRef(null); // Track current request for cancellation
   const debounceTimeout = useRef(null); // Debounce timeout reference
+
+  // Sentence prediction optimizations
+  const sentenceCurrentRequest = useRef(null); // Track current request for cancellation
+  const sentenceDebounceTimeout = useRef(null); // Debounce timeout reference
 
   // Optimized API call with caching, deduplication, and cancellation
   const getPredictions = useCallback(async (text) => {
@@ -203,6 +218,115 @@ export default function Home() {
       }
     };
   }, [textInput, getPredictions]);
+
+  // Sentence prediction function
+  const getSentencePredictions = useCallback(async (text) => {
+    const trimmedText = text.trim();
+    
+    if (!trimmedText || trimmedText.length < 3) {
+      setSentencePredictions({
+        'normal': 0,
+        'hate speech': 0,
+        'offensive': 0,
+        'religious hate': 0,
+        'political hate': 0
+      });
+      return;
+    }
+
+    // Check cache first
+    const cacheKey = trimmedText.toLowerCase();
+    if (cache.current.has(cacheKey)) {
+      console.log('Cache hit for sentence:', trimmedText);
+      setSentencePredictions(cache.current.get(cacheKey));
+      return;
+    }
+
+    // Cancel previous request if still pending
+    if (sentenceCurrentRequest.current) {
+      sentenceCurrentRequest.current.abort();
+    }
+
+    setIsSentencePredictionLoading(true);
+    setSentencePredictionError('');
+    
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    sentenceCurrentRequest.current = controller;
+
+    try {
+      const response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: trimmedText }),
+        signal: controller.signal // Add abort signal
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get sentence predictions');
+      }
+
+      const data = await response.json();
+      
+      // Update predictions based on API response
+      if (data.all_probabilities) {
+        const newPredictions = {
+          'normal': Math.round((data.all_probabilities.normal || 0) * 100),
+          'hate speech': Math.round((data.all_probabilities.hate_speech || 0) * 100),
+          'offensive': Math.round((data.all_probabilities.offensive || 0) * 100),
+          'religious hate': Math.round((data.all_probabilities.religious_hate || 0) * 100),
+          'political hate': Math.round((data.all_probabilities.political_hate || 0) * 100)
+        };
+        
+        // Cache the result
+        cache.current.set(cacheKey, newPredictions);
+        
+        // Limit cache size (keep only last 50 entries)
+        if (cache.current.size > 50) {
+          const firstKey = cache.current.keys().next().value;
+          cache.current.delete(firstKey);
+        }
+        
+        console.log('Setting sentence predictions:', newPredictions);
+        setSentencePredictions(newPredictions);
+      } else {
+        console.log('No all_probabilities found in sentence response');
+      }
+    } catch (err) {
+      // Don't show error if request was cancelled
+      if (err.name === 'AbortError') {
+        console.log('Sentence request cancelled');
+        return;
+      }
+      
+      console.error('Error getting sentence predictions:', err);
+      setSentencePredictionError('Failed to get predictions. Please try again.');
+    } finally {
+      setIsSentencePredictionLoading(false);
+      sentenceCurrentRequest.current = null;
+    }
+  }, []);
+
+  // Debounced sentence prediction effect
+  useEffect(() => {
+    // Clear previous timeout
+    if (sentenceDebounceTimeout.current) {
+      clearTimeout(sentenceDebounceTimeout.current);
+    }
+
+    // Set new timeout with reduced delay for better UX
+    sentenceDebounceTimeout.current = setTimeout(() => {
+      getSentencePredictions(readonlyText);
+    }, 300);
+
+    return () => {
+      if (sentenceDebounceTimeout.current) {
+        clearTimeout(sentenceDebounceTimeout.current);
+      }
+    };
+  }, [readonlyText, getSentencePredictions]);
 
   const categories = [
     'normal',
@@ -460,6 +584,18 @@ export default function Home() {
       .slice(0, 2);
   };
 
+  // Get top 2 sentence predictions
+  const getTop2SentencePredictions = () => {
+    const predictionArray = categories.map(category => ({
+      category,
+      percentage: sentencePredictions[category]
+    }));
+    
+    return predictionArray
+      .sort((a, b) => b.percentage - a.percentage)
+      .slice(0, 2);
+  };
+
   const canSubmit = textInput.trim() && selectedCategory && !isSavingMain;
   const canSubmitReadonly = readonlyText.trim() && 
                            readonlyCategory && 
@@ -640,6 +776,46 @@ export default function Home() {
               className="w-full p-3 sm:p-4 border border-gray-400 rounded-lg resize-none bg-white text-black cursor-default text-sm sm:text-base"
               rows={3}
             />
+            <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-0">
+              <div>
+                {readonlyText.trim().length === 0 && !isSentencePredictionLoading && (
+                  <div className="text-xs sm:text-sm text-gray-400">
+                    sentence classification result 0% all class
+                  </div>
+                )}
+                {isSentencePredictionLoading && (
+                  <div className="text-xs sm:text-sm text-gray-300 flex items-center">
+                    <span className="animate-spin mr-2">⟳</span>
+                    Analyzing sentence...
+                  </div>
+                )}
+                {!isSentencePredictionLoading && readonlyText.trim().length >= 3 && !readonlyText.includes('No sentences available') && !readonlyText.includes('Database setup required') && (
+                  <div className="text-xs sm:text-sm text-green-400 flex items-center">
+                    <span className="mr-2">✓</span>
+                    Sentence predictions updated
+                  </div>
+                )}
+                {readonlyText.trim() && readonlyText.trim().length < 3 && !isSentencePredictionLoading && (
+                  <div className="text-xs sm:text-sm text-gray-300">
+                    Sentence too short for predictions
+                  </div>
+                )}
+              </div>
+              
+              {/* Top 2 Sentence Predictions */}
+              {!isSentencePredictionLoading && readonlyText.trim().length >= 3 && !readonlyText.includes('No sentences available') && !readonlyText.includes('Database setup required') && !readonlyText.includes('Unable to load sentence') && (
+                <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-end">
+                  {getTop2SentencePredictions().map((prediction, index) => (
+                    <CategoryDisplay
+                      key={prediction.category}
+                      category={prediction.category}
+                      percentage={prediction.percentage}
+                      isLoading={false}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Category Selection for Readonly */}

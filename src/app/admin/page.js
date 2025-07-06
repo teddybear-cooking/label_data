@@ -1,16 +1,193 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import NavigationToggle from '../../components/NavigationToggle';
 import { usePagePersistence } from '../../components/PagePersistence';
+
+// Simple category display component with color and percentage
+const CategoryDisplay = ({ category, percentage = 0, isLoading = false }) => {
+  const getColor = (category) => {
+    const colors = {
+      'normal': '#10b981',
+      'hate speech': '#ef4444',
+      'offensive': '#f59e0b',
+      'religious hate': '#8b5cf6',
+      'political hate': '#3b82f6'
+    };
+    return colors[category] || '#6b7280';
+  };
+
+  return (
+    <div className="flex items-center space-x-1 sm:space-x-2 bg-[#1e4558]/80 px-2 py-1 rounded-lg border border-slate-500">
+      {/* Color indicator */}
+      <div 
+        className="w-2 h-2 sm:w-3 sm:h-3 rounded-full"
+        style={{ backgroundColor: getColor(category) }}
+      ></div>
+      {/* Category name */}
+      <span className="text-xs sm:text-sm font-medium text-gray-200 capitalize">
+        {category}
+      </span>
+      {/* Percentage */}
+      <span className="text-xs sm:text-sm font-bold text-gray-300">
+        {isLoading ? '...' : `${percentage}%`}
+      </span>
+    </div>
+  );
+};
 
 export default function AdminPage() {
   const [textInput, setTextInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
 
+  // Prediction state
+  const [predictions, setPredictions] = useState({
+    'normal': 0,
+    'hate speech': 0,
+    'offensive': 0,
+    'religious hate': 0,
+    'political hate': 0
+  });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
   // Use page persistence hook
   usePagePersistence('admin');
+
+  // Performance optimizations
+  const cache = useRef(new Map()); // Cache for responses
+  const currentRequest = useRef(null); // Track current request for cancellation
+  const debounceTimeout = useRef(null); // Debounce timeout reference
+
+  // Optimized API call with caching, deduplication, and cancellation
+  const getPredictions = useCallback(async (text) => {
+    const trimmedText = text.trim();
+    
+    if (!trimmedText || trimmedText.length < 3) {
+      setPredictions({
+        'normal': 0,
+        'hate speech': 0,
+        'offensive': 0,
+        'religious hate': 0,
+        'political hate': 0
+      });
+      return;
+    }
+
+    // Check cache first
+    const cacheKey = trimmedText.toLowerCase();
+    if (cache.current.has(cacheKey)) {
+      console.log('Cache hit for admin text:', trimmedText);
+      setPredictions(cache.current.get(cacheKey));
+      return;
+    }
+
+    // Cancel previous request if still pending
+    if (currentRequest.current) {
+      currentRequest.current.abort();
+    }
+
+    setIsLoading(true);
+    setError('');
+    
+    // Create new AbortController for this request
+    const controller = new AbortController();
+    currentRequest.current = controller;
+
+    try {
+      const response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: trimmedText }),
+        signal: controller.signal // Add abort signal
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get predictions');
+      }
+
+      const data = await response.json();
+      
+      // Update predictions based on API response
+      if (data.all_probabilities) {
+        const newPredictions = {
+          'normal': Math.round((data.all_probabilities.normal || 0) * 100),
+          'hate speech': Math.round((data.all_probabilities.hate_speech || 0) * 100),
+          'offensive': Math.round((data.all_probabilities.offensive || 0) * 100),
+          'religious hate': Math.round((data.all_probabilities.religious_hate || 0) * 100),
+          'political hate': Math.round((data.all_probabilities.political_hate || 0) * 100)
+        };
+        
+        // Cache the result
+        cache.current.set(cacheKey, newPredictions);
+        
+        // Limit cache size (keep only last 50 entries)
+        if (cache.current.size > 50) {
+          const firstKey = cache.current.keys().next().value;
+          cache.current.delete(firstKey);
+        }
+        
+        console.log('Setting admin predictions:', newPredictions);
+        setPredictions(newPredictions);
+      } else {
+        console.log('No all_probabilities found in admin response');
+      }
+    } catch (err) {
+      // Don't show error if request was cancelled
+      if (err.name === 'AbortError') {
+        console.log('Admin request cancelled');
+        return;
+      }
+      
+      console.error('Error getting admin predictions:', err);
+      setError('Failed to get predictions. Please try again.');
+    } finally {
+      setIsLoading(false);
+      currentRequest.current = null;
+    }
+  }, []);
+
+  // Optimized debounce with faster response time
+  useEffect(() => {
+    // Clear previous timeout
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+
+    // Set new timeout with reduced delay for better UX
+    debounceTimeout.current = setTimeout(() => {
+      getPredictions(textInput);
+    }, 300);
+
+    return () => {
+      if (debounceTimeout.current) {
+        clearTimeout(debounceTimeout.current);
+      }
+    };
+  }, [textInput, getPredictions]);
+
+  const categories = [
+    'normal',
+    'hate speech',
+    'offensive',
+    'religious hate',
+    'political hate'
+  ];
+
+  // Get top 2 predictions
+  const getTop2Predictions = () => {
+    const predictionArray = categories.map(category => ({
+      category,
+      percentage: predictions[category]
+    }));
+    
+    return predictionArray
+      .sort((a, b) => b.percentage - a.percentage)
+      .slice(0, 2);
+  };
 
   const handleSubmit = async () => {
     if (!textInput.trim()) {
@@ -114,12 +291,55 @@ export default function AdminPage() {
               className="w-full p-3 sm:p-4 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-green-400 bg-white text-black placeholder-gray-500 text-sm sm:text-base"
               rows={8}
             />
-            <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-              <div className="text-xs sm:text-sm text-gray-400">
-                {textInput.length} characters • {textInput.trim().split(/\s+/).filter(w => w.length > 0).length} words
+            <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-0">
+              <div className="flex flex-col gap-1">
+                <div className="text-xs sm:text-sm text-gray-400">
+                  {textInput.length} characters • {textInput.trim().split(/\s+/).filter(w => w.length > 0).length} words
+                </div>
+                <div>
+                  {textInput.trim().length === 0 && !isLoading && (
+                    <div className="text-xs sm:text-sm text-gray-400">
+                      paragraph classification result 0% all class
+                    </div>
+                  )}
+                  {isLoading && (
+                    <div className="text-xs sm:text-sm text-gray-300 flex items-center">
+                      <span className="animate-spin mr-2">⟳</span>
+                      Analyzing paragraph...
+                    </div>
+                  )}
+                  {!isLoading && textInput.trim().length >= 3 && (
+                    <div className="text-xs sm:text-sm text-green-400 flex items-center">
+                      <span className="mr-2">✓</span>
+                      Paragraph predictions updated
+                    </div>
+                  )}
+                  {textInput.trim() && textInput.trim().length < 3 && !isLoading && (
+                    <div className="text-xs sm:text-sm text-gray-300">
+                      Type at least 3 characters to see predictions
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="text-xs sm:text-sm text-gray-400">
-                Paragraphs will be split into individual sentences for labeling
+              
+              <div className="flex flex-col gap-2">
+                <div className="text-xs sm:text-sm text-gray-400 text-center sm:text-right">
+                  Paragraphs will be split into individual sentences for labeling
+                </div>
+                
+                {/* Top 2 Predictions */}
+                {!isLoading && textInput.trim().length >= 3 && (
+                  <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-end">
+                    {getTop2Predictions().map((prediction, index) => (
+                      <CategoryDisplay
+                        key={prediction.category}
+                        category={prediction.category}
+                        percentage={prediction.percentage}
+                        isLoading={false}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
