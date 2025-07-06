@@ -9,6 +9,25 @@ export default function CsvDataDisplay({ refreshTrigger }) {
   const [csvError, setCsvError] = useState('');
   const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
   const [isClearingCsv, setIsClearingCsv] = useState(false);
+  const [showTimestamps, setShowTimestamps] = useState(false);
+
+  // Format timestamp to readable format
+  const formatTimestamp = (timestamp) => {
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+    } catch (error) {
+      return timestamp;
+    }
+  };
 
   const fetchCsvStats = async () => {
     setIsLoadingCsvStats(true);
@@ -178,6 +197,13 @@ export default function CsvDataDisplay({ refreshTrigger }) {
             )}
           </button>
           <button
+            onClick={() => setShowTimestamps(!showTimestamps)}
+            disabled={!csvStats?.exists || isLoadingCsvStats || isLoadingCsvData}
+            className={`${showTimestamps ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'} disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base w-full sm:w-auto`}
+          >
+            {showTimestamps ? '🕐 Hide Timestamps' : '🕐 Show Timestamps'}
+          </button>
+          <button
             onClick={handleRefreshCsv}
             disabled={isLoadingCsvStats || isLoadingCsvData}
             className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base w-full sm:w-auto"
@@ -331,6 +357,11 @@ export default function CsvDataDisplay({ refreshTrigger }) {
                     <th className="border border-slate-500 px-2 py-1 text-left font-semibold text-gray-200">
                       Label
                     </th>
+                    {showTimestamps && (
+                      <th className="border border-slate-500 px-2 py-1 text-left font-semibold text-gray-200">
+                        Timestamp
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -351,6 +382,13 @@ export default function CsvDataDisplay({ refreshTrigger }) {
                           {entry.label}
                         </span>
                       </td>
+                      {showTimestamps && (
+                        <td className="border border-slate-500 px-2 py-1 text-gray-200">
+                          <div className="text-xs lg:text-sm text-gray-300">
+                            {entry.created_at ? formatTimestamp(entry.created_at) : 'N/A'}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -381,6 +419,11 @@ export default function CsvDataDisplay({ refreshTrigger }) {
               <span>
                 Download contains {csvStats.totalEntries} labeled text entries in tab-separated format. 
                 Perfect for machine learning training datasets.
+                {showTimestamps && (
+                  <span className="ml-2 text-purple-200">
+                    • Timestamps are displayed for saved entries
+                  </span>
+                )}
               </span>
             </div>
           </div>

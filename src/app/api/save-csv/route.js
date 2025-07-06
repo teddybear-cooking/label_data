@@ -3,9 +3,9 @@ import { supabaseAdmin, createTrainingDataTable } from '../../../utils/supabase.
 export async function POST(request) {
   try {
     console.log('=== CSV SAVE REQUEST STARTED ===');
-    const { text, label } = await request.json();
+    const { text, label, sentenceId } = await request.json();
     
-    console.log('Received data:', { text: text?.substring(0, 50) + '...', label });
+    console.log('Received data:', { text: text?.substring(0, 50) + '...', label, sentenceId });
     
     if (!text || text.trim() === '') {
       console.error('ERROR: Text is empty or missing');
@@ -44,6 +44,23 @@ export async function POST(request) {
       console.log('✅ Successfully inserted row into database');
       console.log('✅ Inserted data:', data);
       
+      // If this was a sentence from the sentences table, mark it as used
+      if (sentenceId) {
+        console.log(`Marking sentence ${sentenceId} as used...`);
+        
+        const { error: updateError } = await supabaseAdmin
+          .from('sentences')
+          .update({ is_used: true })
+          .eq('id', sentenceId);
+        
+        if (updateError) {
+          console.error('Error marking sentence as used:', updateError);
+          // Don't fail the whole operation - the training data was saved successfully
+        } else {
+          console.log(`✅ Marked sentence ${sentenceId} as used`);
+        }
+      }
+      
     } catch (dbError) {
       console.error('Database error:', dbError);
       
@@ -81,6 +98,22 @@ export async function POST(request) {
         }
         
         console.log('✅ Successfully inserted row into newly created table');
+        
+        // Mark sentence as used after successful retry
+        if (sentenceId) {
+          console.log(`Marking sentence ${sentenceId} as used after retry...`);
+          
+          const { error: updateError } = await supabaseAdmin
+            .from('sentences')
+            .update({ is_used: true })
+            .eq('id', sentenceId);
+          
+          if (updateError) {
+            console.error('Error marking sentence as used after retry:', updateError);
+          } else {
+            console.log(`✅ Marked sentence ${sentenceId} as used after retry`);
+          }
+        }
       } else {
         throw dbError;
       }
@@ -96,7 +129,8 @@ export async function POST(request) {
       label: cleanLabel,
       timestamp: new Date().toISOString(),
       fileExists: true, // Keep for compatibility
-      storage: 'database'
+      storage: 'database',
+      sentenceMarkedAsUsed: !!sentenceId
     });
     
   } catch (error) {

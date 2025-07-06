@@ -53,6 +53,7 @@ export default function Home() {
   const [readonlyText, setReadonlyText] = useState('');
   const [readonlyCategory, setReadonlyCategory] = useState('');
   const [isLoadingSentence, setIsLoadingSentence] = useState(false);
+  const [currentSentenceId, setCurrentSentenceId] = useState(null);
   
   // Add loading states for save operations
   const [isSavingMain, setIsSavingMain] = useState(false);
@@ -60,6 +61,31 @@ export default function Home() {
 
   // Use page persistence hook
   usePagePersistence('main');
+
+  // Load persisted sentence data on mount
+  useEffect(() => {
+    const savedSentence = localStorage.getItem('currentSentence');
+    const savedSentenceId = localStorage.getItem('currentSentenceId');
+    const savedCategory = localStorage.getItem('currentSentenceCategory');
+    
+    if (savedSentence && savedSentenceId) {
+      setReadonlyText(savedSentence);
+      setCurrentSentenceId(parseInt(savedSentenceId));
+      if (savedCategory) {
+        setReadonlyCategory(savedCategory);
+      }
+      console.log('Restored sentence from localStorage:', savedSentence);
+    }
+  }, []);
+
+  // Save sentence data to localStorage whenever it changes
+  useEffect(() => {
+    if (readonlyText && currentSentenceId) {
+      localStorage.setItem('currentSentence', readonlyText);
+      localStorage.setItem('currentSentenceId', currentSentenceId.toString());
+      localStorage.setItem('currentSentenceCategory', readonlyCategory || '');
+    }
+  }, [readonlyText, currentSentenceId, readonlyCategory]);
 
   // Performance optimizations
   const cache = useRef(new Map()); // Cache for responses
@@ -259,6 +285,29 @@ export default function Home() {
   const fetchNewSentence = async () => {
     setIsLoadingSentence(true);
     try {
+      // Mark current sentence as used before fetching new one (if exists)
+      if (currentSentenceId) {
+        console.log('Marking current sentence as used before fetching new one...');
+        try {
+          const markUsedResponse = await fetch('/api/mark-sentence-used', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sentenceId: currentSentenceId })
+          });
+          
+          if (markUsedResponse.ok) {
+            console.log('✅ Current sentence marked as used');
+          } else {
+            console.warn('Failed to mark current sentence as used');
+          }
+        } catch (markError) {
+          console.error('Error marking sentence as used:', markError);
+          // Continue anyway
+        }
+      }
+      
       const response = await fetch('/api/fetch-sentence');
       if (!response.ok) {
         throw new Error('Failed to fetch sentence');
@@ -267,6 +316,7 @@ export default function Home() {
       
       if (result.success && result.sentence) {
         setReadonlyText(result.sentence);
+        setCurrentSentenceId(result.sentenceId);
         setReadonlyCategory(''); // Reset category when new sentence loads
         console.log('Fetched new sentence:', result.sentence);
       } else {
@@ -278,12 +328,14 @@ export default function Home() {
         } else {
           setReadonlyText('No sentences available.');
         }
+        setCurrentSentenceId(null);
         setReadonlyCategory('');
         console.log('No sentences available:', result.message);
       }
     } catch (error) {
       console.error('Error fetching sentence:', error);
       setReadonlyText('Unable to load sentence. Please try again.');
+      setCurrentSentenceId(null);
     } finally {
       setIsLoadingSentence(false);
     }
@@ -310,7 +362,8 @@ export default function Home() {
     try {
       const requestData = { 
         text: readonlyText.trim(),
-        label: readonlyCategory
+        label: readonlyCategory,
+        sentenceId: currentSentenceId
       };
 
       const response = await fetch('/api/save-csv', {
@@ -331,6 +384,11 @@ export default function Home() {
       if (result.success && result.fileExists) {
         console.log('✅ Readonly data saved successfully:', result.text, '|', result.label);
         
+        // Clear localStorage since sentence was saved and marked as used
+        localStorage.removeItem('currentSentence');
+        localStorage.removeItem('currentSentenceId');
+        localStorage.removeItem('currentSentenceCategory');
+        
         // Automatically fetch a new sentence and reset category
         await fetchNewSentence();
       } else {
@@ -346,10 +404,49 @@ export default function Home() {
     }
   };
 
-  // Load initial sentence when component mounts
+  // Load initial sentence when component mounts (only if not already loaded from localStorage)
   useEffect(() => {
-    fetchNewSentence();
+    if (!readonlyText && !currentSentenceId) {
+      fetchInitialSentence();
+    }
   }, []);
+
+  // Fetch initial sentence without marking any as used
+  const fetchInitialSentence = async () => {
+    setIsLoadingSentence(true);
+    try {
+      const response = await fetch('/api/fetch-sentence');
+      if (!response.ok) {
+        throw new Error('Failed to fetch sentence');
+      }
+      const result = await response.json();
+      
+      if (result.success && result.sentence) {
+        setReadonlyText(result.sentence);
+        setCurrentSentenceId(result.sentenceId);
+        setReadonlyCategory(''); // Reset category when new sentence loads
+        console.log('Fetched initial sentence:', result.sentence);
+      } else {
+        // Handle different error cases
+        if (result.error === 'Database tables not found') {
+          setReadonlyText('Database setup required. Please create the required tables in Supabase first.');
+        } else if (result.message && result.message.includes('No sentences available')) {
+          setReadonlyText('No sentences available. Please submit paragraphs in the Admin Panel first.');
+        } else {
+          setReadonlyText('No sentences available.');
+        }
+        setCurrentSentenceId(null);
+        setReadonlyCategory('');
+        console.log('No sentences available:', result.message);
+      }
+    } catch (error) {
+      console.error('Error fetching initial sentence:', error);
+      setReadonlyText('Unable to load sentence. Please try again.');
+      setCurrentSentenceId(null);
+    } finally {
+      setIsLoadingSentence(false);
+    }
+  };
 
   // Get top 2 predictions
   const getTop2Predictions = () => {
@@ -366,8 +463,10 @@ export default function Home() {
   const canSubmit = textInput.trim() && selectedCategory && !isSavingMain;
   const canSubmitReadonly = readonlyText.trim() && 
                            readonlyCategory && 
+                           currentSentenceId &&
                            !readonlyText.includes('No sentences available') && 
                            !readonlyText.includes('Unable to load sentence') &&
+                           !readonlyText.includes('Database setup required') &&
                            !isSavingReadonly;
 
   return (

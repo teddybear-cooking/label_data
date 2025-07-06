@@ -38,18 +38,8 @@ export async function GET() {
       const selectedSentence = sentences[0];
       console.log(`Selected sentence ID ${selectedSentence.id}: "${selectedSentence.content}"`);
       
-      // Mark this sentence as used
-      const { error: updateError } = await supabaseAdmin
-        .from('sentences')
-        .update({ is_used: true })
-        .eq('id', selectedSentence.id);
-      
-      if (updateError) {
-        console.error('Error marking sentence as used:', updateError);
-        // Continue anyway - don't fail the request
-      } else {
-        console.log(`✅ Marked sentence ${selectedSentence.id} as used`);
-      }
+      // DON'T mark as used yet - only return for labeling
+      console.log(`📋 Sentence ready for labeling (not marked as used yet)`);
       
       // Get count of remaining unused sentences
       const { count: remainingCount, error: countError } = await supabaseAdmin
@@ -62,7 +52,7 @@ export async function GET() {
       }
       
       console.log(`✅ Returned sentence: "${selectedSentence.content}"`);
-      console.log(`📊 Remaining unused sentences: ${remainingCount || 0}`);
+      console.log(`📊 Total unused sentences: ${remainingCount || 0}`);
       
       return Response.json({
         success: true,
