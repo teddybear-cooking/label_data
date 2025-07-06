@@ -1,94 +1,72 @@
-import { 
-  STORAGE_BUCKETS, 
-  supabaseAdmin,
-  updateFileInStorage, 
-  fileExistsInStorage,
-  downloadFromStorage 
-} from '../../../utils/supabase.js';
-import { checkAuthHeader } from '../../../utils/auth';
+import { supabaseAdmin, createTrainingDataTable } from '../../../utils/supabase.js';
 
 export async function POST(request) {
   try {
-    // Remove authentication check for now
-    // if (!checkAuthHeader(request)) {
-    //   return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
-
-    const csvFile = 'training_data.csv';
+    console.log('=== STARTING DATABASE CLEAR OPERATION ===');
     
-    console.log('=== STARTING CSV CLEAR OPERATION ===');
-    console.log('Target file:', csvFile);
-    console.log('Target bucket:', STORAGE_BUCKETS.CSV_DATA);
-    
-    // First, check if file exists
-    const fileExists = await fileExistsInStorage(STORAGE_BUCKETS.CSV_DATA, csvFile);
-    console.log('File exists before clearing:', fileExists);
-    
-    if (!fileExists) {
-      console.log('File does not exist, nothing to clear');
-      return Response.json({ 
-        success: true, 
-        message: 'CSV file does not exist - nothing to clear',
-        storage: 'supabase'
-      });
-    }
-    
-    // Try to remove the file completely first
     try {
-      console.log('Attempting to remove file completely...');
-      const { data: removeData, error: removeError } = await supabaseAdmin.storage
-        .from(STORAGE_BUCKETS.CSV_DATA)
-        .remove([csvFile]);
-        
-      if (removeError) {
-        console.error('Error removing file:', removeError);
-        throw removeError;
+      // Delete all records from the training_data table
+      const { data, error } = await supabaseAdmin
+        .from('training_data')
+        .delete()
+        .neq('id', 0); // Delete all records (neq 0 means all records)
+      
+      if (error) {
+        throw error;
       }
       
-      console.log('File removed successfully:', removeData);
-    } catch (removeError) {
-      console.error('Failed to remove file:', removeError);
-      // Continue to try alternative method
-    }
-    
-    // Create an empty file to ensure it exists but is empty
-    console.log('Creating empty file...');
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
-      .from(STORAGE_BUCKETS.CSV_DATA)
-      .upload(csvFile, '', {
-        contentType: 'text/plain',
-        upsert: true // This will overwrite if file exists
+      console.log('All training data cleared successfully');
+      
+      // Get count to verify it's empty
+      const { count, error: countError } = await supabaseAdmin
+        .from('training_data')
+        .select('*', { count: 'exact', head: true });
+      
+      if (countError) {
+        console.warn('Could not verify clear operation:', countError);
+      }
+      
+      console.log('=== DATABASE CLEAR OPERATION COMPLETED ===');
+      
+      return Response.json({ 
+        success: true, 
+        message: 'Training data cleared successfully from database',
+        storage: 'database',
+        remainingRecords: count || 0
       });
       
-    if (uploadError) {
-      console.error('Error creating empty file:', uploadError);
-      throw uploadError;
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      
+      // If table doesn't exist, create it
+      if (dbError.message.includes('relation "training_data" does not exist') || 
+          dbError.message.includes('table "training_data" does not exist')) {
+        console.log('Training data table does not exist, creating it...');
+        
+        const createResult = await createTrainingDataTable();
+        
+        if (!createResult.success) {
+          console.error('Failed to create table:', createResult.error);
+          throw new Error(`Failed to create table: ${createResult.error}`);
+        }
+        
+        return Response.json({ 
+          success: true, 
+          message: 'Training data table created (already empty)',
+          storage: 'database',
+          remainingRecords: 0
+        });
+      } else {
+        throw dbError;
+      }
     }
     
-    console.log('Empty file created successfully:', uploadData);
-    
-    // Verify the file is actually empty
-    const verifyResult = await downloadFromStorage(STORAGE_BUCKETS.CSV_DATA, csvFile);
-    if (verifyResult.success) {
-      console.log('Verification - file content length:', verifyResult.data.length);
-      console.log('Verification - file content:', JSON.stringify(verifyResult.data));
-    }
-    
-    console.log('=== CSV CLEAR OPERATION COMPLETED ===');
-    
-    return Response.json({ 
-      success: true, 
-      message: 'CSV file cleared successfully in Supabase storage',
-      storage: 'supabase',
-      fileExists: await fileExistsInStorage(STORAGE_BUCKETS.CSV_DATA, csvFile),
-      isEmpty: verifyResult.success && verifyResult.data.length === 0
-    });
   } catch (error) {
-    console.error('Error clearing CSV file from Supabase:', error);
+    console.error('Error clearing training data from database:', error);
     return Response.json({ 
       success: false, 
-      error: 'Failed to clear CSV file from Supabase storage',
-      storage: 'supabase',
+      error: 'Failed to clear training data from database',
+      storage: 'database',
       details: error.message
     }, { status: 500 });
   }

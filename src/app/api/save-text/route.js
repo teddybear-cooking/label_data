@@ -4,14 +4,9 @@ import {
   uploadToStorage, 
   fileExistsInStorage 
 } from '../../../utils/supabase.js';
-import { checkAuthHeader } from '../../../utils/auth';
 
 export async function POST(request) {
   try {
-    // Remove authentication check for now
-    // if (!checkAuthHeader(request)) {
-    //   return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
 
     const { text } = await request.json();
     

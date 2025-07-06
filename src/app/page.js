@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import NavigationToggle from '../components/NavigationToggle';
+import { usePagePersistence } from '../components/PagePersistence';
 
 // Simple category display component with color and percentage
 const CategoryDisplay = ({ category, percentage = 0, isLoading = false }) => {
@@ -55,6 +57,9 @@ export default function Home() {
   // Add loading states for save operations
   const [isSavingMain, setIsSavingMain] = useState(false);
   const [isSavingReadonly, setIsSavingReadonly] = useState(false);
+
+  // Use page persistence hook
+  usePagePersistence('main');
 
   // Performance optimizations
   const cache = useRef(new Map()); // Cache for responses
@@ -362,10 +367,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-black text-white">
       <div className="container mx-auto px-4 py-4 sm:py-8 max-w-4xl">
-        {/* Title */}
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center mb-6 sm:mb-8 text-white">
-          
-        </h1>
+        {/* Header with Navigation Toggle */}
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 sm:mb-8 gap-4 sm:gap-0">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
+            Text Labeling Tool
+          </h1>
+          <NavigationToggle currentPage="main" />
+        </div>
 
         {/* Main Form Section */}
         <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500 mb-4 sm:mb-6">
@@ -396,7 +404,7 @@ export default function Home() {
             <textarea
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="offensive words like... What the fuck brother  OR  Shut the fuck up"
+              placeholder="write offensive words for a sentence"
               className="w-full p-3 sm:p-4 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-500 text-sm sm:text-base"
               rows={4}
             />

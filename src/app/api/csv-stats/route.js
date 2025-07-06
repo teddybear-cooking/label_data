@@ -1,100 +1,101 @@
-import { 
-  STORAGE_BUCKETS, 
-  downloadFromStorage, 
-  fileExistsInStorage, 
-  getFileInfo 
-} from '../../../utils/supabase.js';
-import { checkAuthHeader } from '../../../utils/auth';
+import { supabaseAdmin, createTrainingDataTable } from '../../../utils/supabase.js';
 
 export async function GET(request) {
   try {
-    // Remove authentication check for now
-    // if (!checkAuthHeader(request)) {
-    //   return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
-
-    const csvFile = 'training_data.csv';
+    console.log('Fetching training data statistics from database...');
     
-    const fileExists = await fileExistsInStorage(STORAGE_BUCKETS.CSV_DATA, csvFile);
-    
-    if (!fileExists) {
-      return Response.json({
-        exists: false,
-        totalEntries: 0,
-        labelCounts: {},
-        fileSize: 0,
-        sampleEntries: [],
-        message: 'CSV file does not exist yet in Supabase storage',
-        storage: 'supabase'
-      });
-    }
-
-    // Get file info from Supabase
-    const fileInfoResult = await getFileInfo(STORAGE_BUCKETS.CSV_DATA, csvFile);
-    let fileSize = 0;
-    let lastModified = null;
-    
-    if (fileInfoResult.success) {
-      fileSize = fileInfoResult.data.metadata?.size || 0;
-      lastModified = fileInfoResult.data.updated_at;
-    }
-
-    // Download and parse CSV content
-    const downloadResult = await downloadFromStorage(STORAGE_BUCKETS.CSV_DATA, csvFile);
-    
-    if (!downloadResult.success) {
-      throw new Error(`Failed to download CSV file: ${downloadResult.error}`);
-    }
-    
-    const content = downloadResult.data;
-    const lines = content.split('\n').filter(line => line.trim() !== '');
-    
-    // Parse entries and count labels
-    const entries = [];
-    const labelCounts = {};
-    
-    lines.forEach(line => {
-      const parts = line.split('\t');
-      if (parts.length >= 2) {
-        const text = parts[0].trim();
-        const label = parts[1].trim();
-        
-        if (text && label) {
-          entries.push({ text, label });
-          labelCounts[label] = (labelCounts[label] || 0) + 1;
-        }
+    try {
+      // Get total count and all data for analysis
+      const { data, error, count } = await supabaseAdmin
+        .from('training_data')
+        .select('text, label, created_at', { count: 'exact' });
+      
+      if (error) {
+        throw error;
       }
-    });
-
-    // Get sample entries (first 5)
-    const sampleEntries = entries.slice(0, 5);
-
-    console.log(`CSV Stats: ${entries.length} total entries, ${Object.keys(labelCounts).length} unique labels`);
-
-    return Response.json({
-      exists: true,
-      totalEntries: entries.length,
-      labelCounts: labelCounts,
-      fileSize: fileSize,
-      sampleEntries: sampleEntries,
-      uniqueLabels: Object.keys(labelCounts).length,
-      lastModified: lastModified || new Date().toISOString(),
-      storage: 'supabase'
-    });
-
+      
+      if (!data || data.length === 0) {
+        return Response.json({
+          exists: false,
+          totalEntries: 0,
+          fileSize: 0,
+          labelCounts: {},
+          sampleEntries: [],
+          message: 'No training data found in database'
+        });
+      }
+      
+      // Calculate statistics
+      const labelCounts = {};
+      let totalTextLength = 0;
+      
+      data.forEach(entry => {
+        // Count labels
+        const label = entry.label;
+        labelCounts[label] = (labelCounts[label] || 0) + 1;
+        
+        // Calculate approximate file size
+        totalTextLength += entry.text.length + entry.label.length + 2; // +2 for tab and newline
+      });
+      
+      // Get sample entries (first 5)
+      const sampleEntries = data.slice(0, 5).map(entry => ({
+        text: entry.text,
+        label: entry.label
+      }));
+      
+      console.log(`Database Stats: ${count} entries, ${Object.keys(labelCounts).length} unique labels`);
+      
+      return Response.json({
+        exists: true,
+        totalEntries: count,
+        fileSize: totalTextLength, // Approximate size
+        labelCounts: labelCounts,
+        sampleEntries: sampleEntries,
+        storage: 'database',
+        table: 'training_data'
+      });
+      
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      
+      // If table doesn't exist, create it and return empty result
+      if (dbError.message.includes('relation "training_data" does not exist') || 
+          dbError.message.includes('table "training_data" does not exist')) {
+        console.log('Training data table does not exist, creating it...');
+        
+        const createResult = await createTrainingDataTable();
+        
+        if (!createResult.success) {
+          console.error('Failed to create table:', createResult.error);
+          throw new Error(`Failed to create table: ${createResult.error}`);
+        }
+        
+        return Response.json({
+          exists: true,
+          totalEntries: 0,
+          fileSize: 0,
+          labelCounts: {},
+          sampleEntries: [],
+          message: 'Training data table created successfully (empty)',
+          storage: 'database',
+          table: 'training_data'
+        });
+      } else {
+        throw dbError;
+      }
+    }
+    
   } catch (error) {
-    console.error('Error analyzing CSV file from Supabase:', error);
-    return Response.json(
-      { 
-        error: 'Failed to analyze CSV file from Supabase storage',
-        exists: false,
-        totalEntries: 0,
-        labelCounts: {},
-        fileSize: 0,
-        sampleEntries: [],
-        storage: 'supabase'
-      }, 
-      { status: 500 }
-    );
+    console.error('Error fetching training data statistics:', error);
+    return Response.json({
+      exists: false,
+      totalEntries: 0,
+      fileSize: 0,
+      labelCounts: {},
+      sampleEntries: [],
+      error: 'Failed to fetch statistics from database',
+      storage: 'database'
+    }, { status: 500 });
   }
 } 

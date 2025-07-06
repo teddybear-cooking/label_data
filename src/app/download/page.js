@@ -1,32 +1,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { isAuthenticated, redirectToLogin, logout } from '../../utils/auth';
+import NavigationToggle from '../../components/NavigationToggle';
+import { usePagePersistence } from '../../components/PagePersistence';
 
 export default function DownloadPage() {
   const [fileStats, setFileStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  // Use page persistence hook
+  usePagePersistence('data');
 
   useEffect(() => {
-    // Check authentication on mount
-    if (!isAuthenticated()) {
-      redirectToLogin('/download');
-      return;
-    }
-    setCheckingAuth(false);
     fetchFileStats();
   }, []);
 
   const fetchFileStats = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/csv-stats', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-      });
+      const response = await fetch('/api/csv-stats');
       if (!response.ok) {
         throw new Error('Failed to fetch file statistics');
       }
@@ -40,14 +33,10 @@ export default function DownloadPage() {
     }
   };
 
-  const handleDownload = async () => {
+    const handleDownload = async () => {
     try {
       // Use the new download API that works with Supabase storage
-      const response = await fetch('/api/download-csv', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-      });
+      const response = await fetch('/api/download-csv');
       
       if (!response.ok) {
         throw new Error('Failed to download CSV file');
@@ -56,12 +45,12 @@ export default function DownloadPage() {
       // Get the blob data and create download link
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
+      const link = document.createElement('a');
       link.href = url;
-    link.download = 'training_data.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      link.download = 'training_data.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Error downloading file:', err);
@@ -77,9 +66,6 @@ export default function DownloadPage() {
     try {
       const response = await fetch('/api/clear-csv', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
       });
       
       if (!response.ok) {
@@ -102,41 +88,18 @@ export default function DownloadPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Show loading while checking auth
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-gray-600 dark:text-gray-400">
-          <span className="animate-spin mr-2">⟳</span>
-          Checking authentication...
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <div className="min-h-screen bg-black">
       <div className="container mx-auto px-4 py-4 sm:py-8 max-w-4xl">
-        {/* Header */}
+        {/* Header with Navigation Toggle */}
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4 sm:gap-0">
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white">
-              Download Training Data
+              View Training Data
             </h1>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <a 
-                href="/" 
-                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-center text-sm sm:text-base"
-              >
-                ← Back to Main
-              </a>
-              <button
-                onClick={logout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-sm sm:text-base"
-              >
-                Logout
-              </button>
-            </div>
+            <NavigationToggle currentPage="data" />
           </div>
           <p className="text-gray-300 text-sm sm:text-base">
             View statistics and download your collected training data

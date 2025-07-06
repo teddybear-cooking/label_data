@@ -1,12 +1,7 @@
 import { supabaseAdmin, createTrainingDataTable } from '../../../utils/supabase.js';
-import { checkAuthHeader } from '../../../utils/auth.js';
 
 export async function GET(request) {
   try {
-    // Remove authentication check for now
-    // if (!checkAuthHeader(request)) {
-    //   return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    // }
 
     console.log('Generating CSV from database table...');
     
