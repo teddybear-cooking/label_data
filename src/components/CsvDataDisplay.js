@@ -9,6 +9,9 @@ export default function CsvDataDisplay({ refreshTrigger }) {
   const [csvError, setCsvError] = useState('');
   const [isDownloadingCsv, setIsDownloadingCsv] = useState(false);
   const [isClearingCsv, setIsClearingCsv] = useState(false);
+  const [isDeletingRow, setIsDeletingRow] = useState(false);
+  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'month'
+  const [successMessage, setSuccessMessage] = useState('');
 
   const fetchCsvStats = async () => {
     setIsLoadingCsvStats(true);
@@ -54,6 +57,67 @@ export default function CsvDataDisplay({ refreshTrigger }) {
     } finally {
       setIsLoadingCsvData(false);
     }
+  };
+
+  const handleDeleteRow = async (id) => {
+    // Show confirmation dialog
+    const confirmDelete = window.confirm(
+      'Are you sure you want to delete this row? This action cannot be undone.'
+    );
+    
+    if (!confirmDelete) {
+      return;
+    }
+
+    setIsDeletingRow(true);
+    try {
+      const response = await fetch('/api/delete-row', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete row');
+      }
+
+      // Show success message
+      setSuccessMessage('Row deleted successfully');
+      setTimeout(() => setSuccessMessage(''), 3000);
+
+      // Refresh data
+      await fetchCsvStats();
+    } catch (error) {
+      console.error('Error deleting row:', error);
+      setCsvError('Failed to delete row');
+    } finally {
+      setIsDeletingRow(false);
+    }
+  };
+
+  const filterEntriesByDate = (entries) => {
+    if (!entries || dateFilter === 'all') return entries;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+
+    return entries.filter(entry => {
+      const entryDate = new Date(entry.created_at);
+      switch (dateFilter) {
+        case 'today':
+          return entryDate >= today;
+        case 'week':
+          return entryDate >= weekAgo;
+        case 'month':
+          return entryDate >= monthAgo;
+        default:
+          return true;
+      }
+    });
   };
 
   const handleRefreshCsv = () => {
@@ -156,17 +220,20 @@ export default function CsvDataDisplay({ refreshTrigger }) {
     fetchCsvStats();
   }, [refreshTrigger]);
 
+  const filteredEntries = csvData ? filterEntriesByDate(csvData.entries) : [];
+
   return (
     <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 lg:p-6 border border-slate-500 h-full flex flex-col">
+      {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4 sm:gap-0">
         <h2 className="text-lg lg:text-xl font-semibold text-white">
-          CSV Training Data
+          Training Data
         </h2>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={handleDownloadCsv}
             disabled={!csvStats?.exists || isDownloadingCsv || isLoadingCsvStats || isLoadingCsvData}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base w-full sm:w-auto"
+            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base"
           >
             {isDownloadingCsv ? (
               <span className="flex items-center justify-center">
@@ -180,7 +247,7 @@ export default function CsvDataDisplay({ refreshTrigger }) {
           <button
             onClick={handleRefreshCsv}
             disabled={isLoadingCsvStats || isLoadingCsvData}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base w-full sm:w-auto"
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base"
           >
             {isLoadingCsvStats || isLoadingCsvData ? (
               <span className="flex items-center justify-center">
@@ -194,7 +261,7 @@ export default function CsvDataDisplay({ refreshTrigger }) {
           <button
             onClick={handleClearCsv}
             disabled={!csvStats?.exists || isClearingCsv || isLoadingCsvStats || isLoadingCsvData}
-            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base w-full sm:w-auto"
+            className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 py-2 rounded-lg transition-colors duration-200 text-sm lg:text-base"
           >
             {isClearingCsv ? (
               <span className="flex items-center justify-center">
@@ -202,190 +269,116 @@ export default function CsvDataDisplay({ refreshTrigger }) {
                 Clearing...
               </span>
             ) : (
-              '🗑️ Clear CSV'
+              '🗑️ Clear All'
             )}
           </button>
         </div>
       </div>
 
-      {/* CSV Error/Success Display */}
-      {csvError && (
-        <div className={`mb-3 p-2 rounded-lg text-sm lg:text-base ${
-          csvError.includes('✅') 
-            ? 'bg-green-900/80 border border-green-600 text-green-200' 
-            : 'bg-red-900/80 border border-red-600 text-red-200'
-        }`}>
-          {csvError}
-        </div>
-      )}
-
-      {/* Scrollable Content Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        {/* CSV Statistics */}
+      {/* Filter Section */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="bg-slate-700 text-white border border-slate-500 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+        >
+          <option value="all">All Time</option>
+          <option value="today">Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+        </select>
         {csvStats && (
-          <div className="mb-4">
-            <h3 className="text-lg lg:text-xl font-semibold mb-3 text-white">
-              File Statistics
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-4">
-              <div className="bg-blue-700/50 border border-blue-600 p-2 rounded-lg text-center">
-                <div className="text-lg lg:text-xl font-bold text-blue-300">
-                  {csvStats.totalEntries || 0}
-                </div>
-                <div className="text-xs lg:text-sm text-gray-200">
-                  Total Rows
-                </div>
-              </div>
-              <div className="bg-green-700/50 border border-green-600 p-2 rounded-lg text-center">
-                <div className="text-lg lg:text-xl font-bold text-green-300">
-                  {csvStats.uniqueLabels || 0}
-                </div>
-                <div className="text-xs lg:text-sm text-gray-200">
-                  Unique Labels
-                </div>
-              </div>
-              <div className="bg-purple-700/50 border border-purple-600 p-2 rounded-lg text-center">
-                <div className="text-lg lg:text-xl font-bold text-purple-300">
-                  {csvStats.fileSize ? `${(csvStats.fileSize / 1024).toFixed(1)} KB` : '0 KB'}
-                </div>
-                <div className="text-xs lg:text-sm text-gray-200">
-                  File Size
-                </div>
-              </div>
-              <div className="bg-orange-700/50 border border-orange-600 p-2 rounded-lg text-center">
-                <div className="text-lg lg:text-xl font-bold text-orange-300">
-                  {csvStats.storage || 'N/A'}
-                </div>
-                <div className="text-xs lg:text-sm text-gray-200">
-                  Storage
-                </div>
-              </div>
-            </div>
-
-            {/* Label Distribution */}
-            {csvStats.labelCounts && Object.keys(csvStats.labelCounts).length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm lg:text-base font-semibold mb-2 text-white">
-                  Label Distribution
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1">
-                  {Object.entries(csvStats.labelCounts)
-                    .sort(([,a], [,b]) => b - a)
-                    .map(([label, count]) => {
-                      const percentage = csvStats.totalEntries > 0 ? (count / csvStats.totalEntries * 100).toFixed(1) : 0;
-                      return (
-                        <div key={label} className="flex justify-between items-center p-2 bg-slate-700 border border-slate-500 rounded text-xs lg:text-sm">
-                          <span className="font-medium text-gray-200 capitalize">
-                            {label}
-                          </span>
-                          <span className="text-gray-300">
-                            {count} ({percentage}%)
-                          </span>
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* CSV Data Table */}
-        {csvData && csvData.exists && (
-          <div>
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 gap-2 sm:gap-0">
-              <h3 className="text-sm lg:text-base font-semibold text-white">
-                CSV Data (Page {csvData.page} of {csvData.totalPages})
-              </h3>
-              <div className="flex items-center space-x-2 justify-center sm:justify-end">
-                <button
-                  onClick={() => handleCsvPageChange(csvData.page - 1)}
-                  disabled={!csvData.hasPrevPage || isLoadingCsvData}
-                  className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-2 py-1 rounded text-xs lg:text-sm transition-colors duration-200"
-                >
-                  ← Prev
-                </button>
-                <span className="text-xs lg:text-sm text-gray-300 px-2">
-                  {csvData.page} / {csvData.totalPages}
-                </span>
-                <button
-                  onClick={() => handleCsvPageChange(csvData.page + 1)}
-                  disabled={!csvData.hasNextPage || isLoadingCsvData}
-                  className="bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white px-2 py-1 rounded text-xs lg:text-sm transition-colors duration-200"
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-slate-500 text-xs lg:text-sm">
-                <thead>
-                  <tr className="bg-slate-700">
-                    <th className="border border-slate-500 px-2 py-1 text-left font-semibold text-gray-200">
-                      #
-                    </th>
-                    <th className="border border-slate-500 px-2 py-1 text-left font-semibold text-gray-200">
-                      Text
-                    </th>
-                    <th className="border border-slate-500 px-2 py-1 text-left font-semibold text-gray-200">
-                      Label
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {csvData.entries.map((entry, index) => (
-                    <tr key={entry.id} className={index % 2 === 0 ? 'bg-slate-800' : 'bg-slate-700'}>
-                      <td className="border border-slate-500 px-2 py-1 text-gray-200">
-                        {entry.id}
-                      </td>
-                      <td className="border border-slate-500 px-2 py-1 text-gray-200">
-                        <div className="max-w-md lg:max-w-lg">
-                          <div className="truncate" title={entry.text}>
-                            {entry.textPreview}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="border border-slate-500 px-2 py-1">
-                        <span className="inline-block bg-blue-700/60 text-blue-200 px-2 py-1 rounded text-xs lg:text-sm font-medium capitalize border border-blue-600">
-                          {entry.label}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* No Data Message */}
-        {csvStats && !csvStats.exists && (
-          <div className="text-center py-8 text-gray-300">
-            <div className="text-4xl mb-4">📊</div>
-            <h3 className="text-lg lg:text-xl font-semibold mb-2">No CSV Data Yet</h3>
-            <p className="text-sm lg:text-base">
-              Start labeling text data to see it appear here.
-            </p>
-            <p className="text-xs lg:text-sm mt-2 opacity-75">
-              Once you have data, you can download the CSV file using the download button above.
-            </p>
-          </div>
-        )}
-
-        {/* Download Info */}
-        {csvStats && csvStats.exists && csvStats.totalEntries > 0 && (
-          <div className="mt-4 p-2 bg-blue-700/50 border border-blue-600 rounded-lg">
-            <div className="flex items-center text-xs lg:text-sm text-blue-200">
-              <span className="mr-2">💡</span>
-              <span>
-                Download contains {csvStats.totalEntries} labeled text entries in tab-separated format. 
-                Perfect for machine learning training datasets.
-              </span>
-            </div>
+          <div className="text-gray-300 text-sm flex items-center">
+            {filteredEntries.length} entries shown
           </div>
         )}
       </div>
+
+      {/* Messages */}
+      {(csvError || successMessage) && (
+        <div className={`mb-4 p-3 rounded-lg text-sm ${
+          successMessage 
+            ? 'bg-green-900/80 border border-green-600 text-green-200' 
+            : 'bg-red-900/80 border border-red-600 text-red-200'
+        }`}>
+          {successMessage || csvError}
+        </div>
+      )}
+
+      {/* Data Table */}
+      <div className="flex-grow overflow-auto">
+        {csvData && csvData.entries.length > 0 ? (
+          <div className="min-w-full divide-y divide-slate-600 border border-slate-600 rounded-lg overflow-hidden">
+            {/* Table Header */}
+            <div className="bg-slate-700 text-white">
+              <div className="grid grid-cols-[1fr,1fr,auto,auto] gap-4 p-3 text-sm font-semibold">
+                <div>Text</div>
+                <div>Label</div>
+                <div>Date</div>
+                <div>Actions</div>
+              </div>
+            </div>
+            {/* Table Body */}
+            <div className="divide-y divide-slate-600 bg-slate-800/50">
+              {filteredEntries.map((entry) => (
+                <div key={entry.id} className="grid grid-cols-[1fr,1fr,auto,auto] gap-4 p-3 text-sm hover:bg-slate-700/50 transition-colors">
+                  <div className="text-gray-300 break-words">{entry.textPreview}</div>
+                  <div className="text-gray-300">{entry.label}</div>
+                  <div className="text-gray-400 whitespace-nowrap">
+                    {new Date(entry.created_at).toLocaleDateString()}
+                  </div>
+                  <div>
+                    <button
+                      onClick={() => handleDeleteRow(entry.id)}
+                      disabled={isDeletingRow}
+                      className="text-red-400 hover:text-red-300 transition-colors p-1 rounded focus:outline-none focus:ring-2 focus:ring-red-400"
+                      title="Delete row"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center text-gray-400 py-8">
+            {isLoadingCsvData ? (
+              <div className="flex items-center justify-center">
+                <span className="animate-spin mr-2">⟳</span>
+                Loading data...
+              </div>
+            ) : (
+              'No training data available'
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {csvData && csvData.totalPages > 1 && (
+        <div className="mt-4 flex justify-center gap-2">
+          <button
+            onClick={() => handleCsvPageChange(csvCurrentPage - 1)}
+            disabled={!csvData.hasPrevPage || isLoadingCsvData}
+            className="px-3 py-1 rounded-lg bg-slate-700 text-white disabled:bg-slate-600 disabled:text-gray-400 text-sm"
+          >
+            Previous
+          </button>
+          <span className="px-3 py-1 text-gray-300 text-sm">
+            Page {csvCurrentPage} of {csvData.totalPages}
+          </span>
+          <button
+            onClick={() => handleCsvPageChange(csvCurrentPage + 1)}
+            disabled={!csvData.hasNextPage || isLoadingCsvData}
+            className="px-3 py-1 rounded-lg bg-slate-700 text-white disabled:bg-slate-600 disabled:text-gray-400 text-sm"
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 } 

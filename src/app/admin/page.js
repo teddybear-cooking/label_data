@@ -40,6 +40,7 @@ export default function AdminPage() {
   const [textInput, setTextInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [savedParagraphs, setSavedParagraphs] = useState([]);
 
   // Prediction state
   const [predictions, setPredictions] = useState({
@@ -54,6 +55,38 @@ export default function AdminPage() {
 
   // Use page persistence hook
   usePagePersistence('admin');
+
+  // Load saved paragraphs on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('adminParagraphs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setSavedParagraphs(Array.isArray(parsed) ? parsed : []);
+      } catch (e) {
+        console.error('Error loading saved paragraphs:', e);
+        setSavedParagraphs([]);
+      }
+    }
+  }, []);
+
+  // Save paragraphs to localStorage
+  const saveParagraphToStorage = (text) => {
+    const newParagraphs = [...savedParagraphs, { 
+      id: Date.now(), 
+      text, 
+      timestamp: new Date().toISOString() 
+    }];
+    setSavedParagraphs(newParagraphs);
+    localStorage.setItem('adminParagraphs', JSON.stringify(newParagraphs));
+  };
+
+  // Delete a paragraph
+  const deleteParagraph = (id) => {
+    const newParagraphs = savedParagraphs.filter(p => p.id !== id);
+    setSavedParagraphs(newParagraphs);
+    localStorage.setItem('adminParagraphs', JSON.stringify(newParagraphs));
+  };
 
   // Performance optimizations
   const cache = useRef(new Map()); // Cache for responses
@@ -221,8 +254,9 @@ export default function AdminPage() {
       const result = await response.json();
       
       if (result.success) {
-        // Show more informative success message about where data is stored
-        setMessage(`✅ Paragraph saved to database and split into ${result.wordCount} words. Sentences will be available for labeling.`);
+        setMessage('✅ Paragraph submitted successfully! Sentences will be available for labeling.');
+        // Save to localStorage before clearing
+        saveParagraphToStorage(cleanedText);
         setTextInput(''); // Clear the form
         
         // Clear success message after 3 seconds
@@ -268,7 +302,7 @@ export default function AdminPage() {
               Submit Training Paragraphs
             </h2>
             <p className="text-sm sm:text-base text-gray-300">
-              Submit paragraphs that will be split into sentences and stored in the database for labeling.
+              Submit paragraphs that will be used as training data for sentence labeling.
             </p>
           </div>
 
@@ -365,9 +399,41 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Saved Paragraphs Section */}
+        {savedParagraphs.length > 0 && (
+          <div className="mt-6 bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500">
+            <h2 className="text-lg sm:text-xl font-semibold text-white mb-4">
+              Saved Paragraphs
+            </h2>
+            <div className="space-y-4">
+              {savedParagraphs.map((paragraph) => (
+                <div key={paragraph.id} className="bg-slate-700/50 rounded-lg p-3 border border-slate-600">
+                  <div className="flex justify-between items-start gap-4">
+                    <p className="text-sm text-gray-300 flex-grow line-clamp-3">
+                      {paragraph.text}
+                    </p>
+                    <button
+                      onClick={() => deleteParagraph(paragraph.id)}
+                      className="text-red-400 hover:text-red-300 transition-colors p-1 rounded focus:outline-none focus:ring-2 focus:ring-red-400"
+                      title="Delete paragraph"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-400">
+                    {new Date(paragraph.timestamp).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Instructions */}
         <div className="mt-6 text-center text-sm text-gray-400">
-          <p>Submitted paragraphs are stored in the database and split into sentences for labeling on the main page.</p>
+          <p>Submit training paragraphs that will be used to generate sentences for labeling on the main page.</p>
         </div>
       </div>
     </div>
