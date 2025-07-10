@@ -1,38 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import CategoryDisplay from './CategoryDisplay';
 
-// Simple category display component with color and percentage
-const CategoryDisplay = ({ category, percentage = 0, isLoading = false }) => {
-  const getColor = (category) => {
-    const colors = {
-      'normal': '#10b981',
-      'hate speech': '#ef4444',
-      'offensive': '#f59e0b',
-      'religious hate': '#8b5cf6',
-      'political hate': '#3b82f6'
-    };
-    return colors[category] || '#6b7280';
-  };
-
-  return (
-    <div className="flex items-center space-x-1 sm:space-x-2 bg-[#1e4558]/80 px-2 py-1 rounded-lg border border-slate-500">
-      {/* Color indicator */}
-      <div 
-        className="w-2 h-2 sm:w-3 sm:h-3 rounded-full"
-        style={{ backgroundColor: getColor(category) }}
-      ></div>
-      {/* Category name */}
-      <span className="text-xs sm:text-sm font-medium text-gray-200 capitalize">
-        {category}
-      </span>
-      {/* Percentage */}
-      <span className="text-xs sm:text-sm font-bold text-gray-300">
-        {isLoading ? '...' : `${percentage}%`}
-      </span>
-    </div>
-  );
-};
-
-export default function TextInputForm({ onSubmissionSuccess }) {
+const TextInputForm = ({ onError }) => {
   const [textInput, setTextInput] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [predictions, setPredictions] = useState({
@@ -43,7 +12,7 @@ export default function TextInputForm({ onSubmissionSuccess }) {
     'political hate': 0
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // Performance optimizations
   const cache = useRef(new Map()); // Cache for responses
@@ -87,7 +56,6 @@ export default function TextInputForm({ onSubmissionSuccess }) {
     }
 
     setIsLoading(true);
-    setError('');
     
     // Create new AbortController for this request
     const controller = new AbortController();
@@ -109,6 +77,9 @@ export default function TextInputForm({ onSubmissionSuccess }) {
 
       const data = await response.json();
       
+      // Debug: Log the API response
+      console.log('API Response:', data);
+      
       // Update predictions based on API response
       if (data.all_probabilities) {
         const newPredictions = {
@@ -128,7 +99,10 @@ export default function TextInputForm({ onSubmissionSuccess }) {
           cache.current.delete(firstKey);
         }
         
+        console.log('Setting predictions:', newPredictions);
         setPredictions(newPredictions);
+      } else {
+        console.log('No all_probabilities found in response');
       }
     } catch (err) {
       // Don't show error if request was cancelled
@@ -138,12 +112,12 @@ export default function TextInputForm({ onSubmissionSuccess }) {
       }
       
       console.error('Error getting predictions:', err);
-      setError('Failed to get predictions. Please try again.');
+      onError('Failed to get predictions. Please try again.');
     } finally {
       setIsLoading(false);
       currentRequest.current = null;
     }
-  }, []);
+  }, [onError]);
 
   // Optimized debounce with faster response time
   useEffect(() => {
@@ -170,19 +144,30 @@ export default function TextInputForm({ onSubmissionSuccess }) {
 
   const handleSubmit = async () => {
     if (!textInput.trim()) {
-      alert('⚠️ Please enter some text before saving.');
+      onError('⚠️ Please enter some text before saving.');
       return;
     }
     
     if (!selectedCategory) {
-      alert('⚠️ Please select a category before saving.');
+      onError('⚠️ Please select a category before saving.');
       return;
     }
 
+    // Set loading state immediately for smooth UX
+    setIsSaving(true);
+    
+    // Store current values for rollback if needed
+    const currentText = textInput;
+    const currentCategory = selectedCategory;
+
+    // Optimistically update UI
+    setTextInput('');
+    setSelectedCategory('');
+
     try {
       const requestData = { 
-        text: textInput.trim(),
-        label: selectedCategory
+        text: currentText.trim(),
+        label: currentCategory
       };
 
       const response = await fetch('/api/save-csv', {
@@ -200,22 +185,18 @@ export default function TextInputForm({ onSubmissionSuccess }) {
 
       const result = await response.json();
       
-      if (result.success && result.fileExists) {
-        // Reset form only after successful save
-        setTextInput('');
-        setSelectedCategory('');
-        
-        // Notify parent component about successful submission
-        if (onSubmissionSuccess) {
-          onSubmissionSuccess(result);
-        }
-      } else {
-        throw new Error('Save operation may have failed - file verification failed');
+      if (!result.success) {
+        throw new Error('Save operation failed');
       }
       
     } catch (error) {
       console.error('Error saving data:', error);
-      alert('❌ Failed to save data. Please try again.');
+      // Rollback on error
+      setTextInput(currentText);
+      setSelectedCategory(currentCategory);
+      onError('Failed to save. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -231,57 +212,55 @@ export default function TextInputForm({ onSubmissionSuccess }) {
       .slice(0, 2);
   };
 
-  const canSubmit = textInput.trim() && selectedCategory;
+  const canSubmit = textInput.trim() && selectedCategory && !isSaving;
 
   return (
-    <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 lg:p-6 border border-slate-500 h-full flex flex-col">
+    <div className="bg-[#1B3C53] rounded-lg shadow-xl p-4 sm:p-6 border border-slate-500 mb-4 sm:mb-6">
       {/* Header */}
-      <div className="mb-4">
-        <h2 className="text-lg lg:text-xl font-semibold text-white">
-          Write
+      <div className="mb-4 sm:mb-6">
+        <h2 className="text-lg sm:text-xl font-semibold text-white">
+          Write anything under these categories
         </h2>
-        <div className="text-center text-xs lg:text-sm text-gray-300 mt-2">
+      </div>
+
+      {/* Categories Display */}
+      <div className="mb-4">
+        <div className="text-center text-xs sm:text-sm text-gray-300 px-2">
           <span className="block sm:inline">normal • hate speech • offensive</span>
           <span className="block sm:inline sm:ml-2">religious hate • political hate</span>
         </div>
       </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="mb-3 p-2 bg-red-900/80 border border-red-600 text-red-200 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-
       {/* Text Input */}
-      <div className="mb-4 flex-1 flex flex-col min-h-0">
+      <div className="mb-4 sm:mb-6">
         <textarea
           value={textInput}
           onChange={(e) => setTextInput(e.target.value)}
-          placeholder="write something offensive for a sentence."
-          className="w-full p-3 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-500 text-sm lg:text-base flex-1 min-h-0"
+          placeholder="write offensive words for a sentence"
+          className="w-full p-3 sm:p-4 border border-gray-400 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white text-black placeholder-gray-500 text-sm sm:text-base"
+          rows={4}
         />
         <div className="mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-0">
           <div>
             {textInput.trim().length === 0 && !isLoading && (
-              <div className="text-xs lg:text-sm text-gray-400">
+              <div className="text-xs sm:text-sm text-gray-400">
                 sentence classification result 0% all class
               </div>
             )}
             {isLoading && (
-              <div className="text-xs lg:text-sm text-gray-300 flex items-center">
+              <div className="text-xs sm:text-sm text-gray-300 flex items-center">
                 <span className="animate-spin mr-2">⟳</span>
                 Analyzing text...
               </div>
             )}
             {!isLoading && textInput.trim().length >= 3 && (
-              <div className="text-xs lg:text-sm text-green-400 flex items-center">
+              <div className="text-xs sm:text-sm text-green-400 flex items-center">
                 <span className="mr-2">✓</span>
                 Predictions updated
               </div>
             )}
             {textInput.trim() && textInput.trim().length < 3 && !isLoading && (
-              <div className="text-xs lg:text-sm text-gray-300">
+              <div className="text-xs sm:text-sm text-gray-300">
                 Type at least 3 characters to see predictions
               </div>
             )}
@@ -289,7 +268,7 @@ export default function TextInputForm({ onSubmissionSuccess }) {
           
           {/* Top 2 Predictions */}
           {!isLoading && textInput.trim().length >= 3 && (
-            <div className="flex flex-wrap gap-2 justify-center sm:justify-end">
+            <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-end">
               {getTop2Predictions().map((prediction, index) => (
                 <CategoryDisplay
                   key={prediction.category}
@@ -304,15 +283,15 @@ export default function TextInputForm({ onSubmissionSuccess }) {
       </div>
 
       {/* Category Selection */}
-      <div className="mb-4">
-        <p className="text-sm lg:text-base font-medium text-gray-200 mb-3">
+      <div className="mb-4 sm:mb-6">
+        <p className="text-sm sm:text-base font-medium text-gray-200 mb-3">
           Select a category:
         </p>
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
           {categories.map((category) => (
             <label
               key={category}
-              className="flex items-center space-x-3 cursor-pointer hover:bg-[#254761] p-2 rounded-lg border border-slate-400 bg-[#1e4558]/70 transition-colors"
+              className="flex items-center space-x-3 cursor-pointer hover:bg-[#254761] p-3 rounded-lg border border-slate-400 bg-[#1e4558]/70 transition-colors"
             >
               <input
                 type="checkbox"
@@ -320,25 +299,39 @@ export default function TextInputForm({ onSubmissionSuccess }) {
                 onChange={() => handleCategoryChange(category)}
                 className="w-4 h-4 text-blue-400 bg-white border-gray-400 rounded focus:ring-blue-400 focus:ring-2"
               />
-              <span className="text-sm lg:text-base font-medium text-gray-200 capitalize flex-1">
+              <span className="text-sm sm:text-base font-medium text-gray-200 capitalize flex-1">
                 {category}
               </span>
             </label>
           ))}
         </div>
       </div>
-      
+
       {/* Submit Button - Only visible when both text and category are selected */}
       {canSubmit && (
-        <div className="flex justify-center pt-2 border-t border-slate-600">
+        <div className="flex justify-center">
           <button
             onClick={handleSubmit}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm lg:text-base w-full"
+            disabled={isSaving}
+            className={`font-semibold py-3 px-6 sm:px-8 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-600 text-sm sm:text-base w-full sm:w-auto transform ${
+              isSaving 
+                ? 'bg-blue-400 cursor-not-allowed scale-95' 
+                : 'bg-blue-600 hover:bg-blue-700 hover:scale-105 active:scale-95'
+            } text-white`}
           >
-            Save to CSV
+            {isSaving ? (
+              <span className="flex items-center justify-center">
+                <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
+                Saving...
+              </span>
+            ) : (
+              'Save to CSV'
+            )}
           </button>
         </div>
       )}
     </div>
   );
-} 
+};
+
+export default TextInputForm; 
